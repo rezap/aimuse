@@ -12,6 +12,11 @@ on:
         description: Also run live Lyria API tests (paid, about $0.04 per run)
         type: boolean
         default: false
+      live_preset:
+        description: Station used by the live test
+        type: choice
+        options: [rainy-morning-indie, late-night-lofi, sunset-synthpop]
+        default: rainy-morning-indie
 
 permissions:
   contents: read
@@ -72,9 +77,23 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           AIMUSE_LIVE: "1"
+          AIMUSE_LIVE_PRESET: ${{ inputs.live_preset }}
+          AIMUSE_ARTIFACT_DIR: ${{ github.workspace }}/live-out
         run: |
           if [ -z "$GEMINI_API_KEY" ]; then
             echo "::error::GEMINI_API_KEY secret is not set."
             exit 1
           fi
           pytest -m live -v -s
+      - name: Report
+        if: always()
+        run: |
+          f="$GITHUB_WORKSPACE/live-out/live-summary.md"
+          if [ -f "$f" ]; then cat "$f" >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: lyria-live-test-${{ github.run_number }}-${{ inputs.live_preset }}
+          path: live-out
+          retention-days: 14
+          if-no-files-found: warn
