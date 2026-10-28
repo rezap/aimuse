@@ -223,3 +223,6 @@ __marimo__/
 out/
 smoke-out/
 spike-out/
+
+# The Python template above ignores lib/; the web app keeps source code there.
+!web/src/lib/

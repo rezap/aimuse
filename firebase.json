@@ -1,0 +1,35 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "runtime": "python312",
+      "ignore": ["venv", ".git", "tests", "__pycache__", "*.local", ".pytest_cache", ".ruff_cache"],
+      "predeploy": [
+        "rm -rf \"$RESOURCE_DIR/aimuse\" && cp -r backend/src/aimuse \"$RESOURCE_DIR/aimuse\""
+      ]
+    }
+  ],
+  "hosting": {
+    "public": "web/out",
+    "ignore": ["firebase.json", "**/.*"],
+    "cleanUrls": true,
+    "predeploy": ["npm --prefix web ci", "npm --prefix web run build"]
+  },
+  "emulators": {
+    "singleProjectMode": true,
+    "auth": { "port": 9099 },
+    "firestore": { "port": 8080 },
+    "storage": { "port": 9199 },
+    "functions": { "port": 5001 },
+    "hosting": { "port": 5000 },
+    "ui": { "enabled": true, "port": 4000 }
+  }
+}

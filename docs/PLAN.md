@@ -219,7 +219,7 @@ Lyria can't continue or edit a track, so consistency is engineered:
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Web client | **Next.js PWA on Firebase App Hosting** | Installable on Android; player‑first UI for personal listening; offline cache of downloaded songs |
+| Web client | **Next.js PWA, static export on Firebase Hosting** (simpler and cheaper than App Hosting; no server needed) | Installable on Android; player‑first UI for personal listening; offline cache of downloaded songs |
 | Auth | **Firebase Auth** (Google Sign‑In) | Same accounts later for an Android app |
 | Database | **Cloud Firestore** | Users, taste profiles, stations, tracks, recipes, jobs. Firestore vector search holds track and taste embeddings. |
 | Files | **Cloud Storage for Firebase** | Generated audio, cover art, user‑uploaded reference tracks (private per user) |
@@ -258,10 +258,11 @@ aimuse/
   backend/            # Python package `aimuse`: models, prompt compiler, engines,
     src/aimuse/       # analysis, pipeline, spike experiment, CLI, station presets
     tests/            # offline tests (fake engine, mocked Lyria API)
-  functions/          # Cloud Functions for Firebase (Python), wraps backend/ (next)
-  web/                # Next.js PWA (next)
+  functions/          # Cloud Functions for Firebase (Python): song jobs, wraps backend/
+  web/                # Next.js PWA: sign in, composer, live progress, library
+  scripts/            # dev.sh (local emulators), e2e.sh (end-to-end test)
   android/            # later
-  .github/workflows/  # backend-ci.yml (every push), lyria-spike.yml (manual, paid)
+  .github/workflows/  # backend-ci, app-ci (every push); lyria-spike, deploy (manual)
   docs/
 ```
 

@@ -1,0 +1,11 @@
+# Cloud Functions runtime dependencies. The backend package itself (aimuse/) is copied in by
+# the firebase.json predeploy hook; its own dependencies are listed here.
+firebase-functions>=0.6.0
+firebase-admin>=7.0.0
+httpx>=0.27
+librosa>=0.10
+numpy>=1.26
+pillow>=10
+pydantic>=2.6
+pyloudnorm>=0.1.1
+soundfile>=0.12.1

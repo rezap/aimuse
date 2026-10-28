@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// Generated audio lives at users/{uid}/tracks/*. Only the Cloud Function (admin) writes it;
+// the owner may play, download or delete their own files.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /users/{uid}/tracks/{file} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if false;
+    }
+  }
+}
