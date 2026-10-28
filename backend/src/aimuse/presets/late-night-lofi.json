@@ -1,0 +1,29 @@
+{
+  "id": "late-night-lofi",
+  "name": "Late Night Lo-fi",
+  "description": "Mellow late-night lo-fi hip hop for focus: dusty jazz piano chords, laid-back swung drums, vinyl crackle and deep round bass.",
+  "genres": ["lo-fi hip hop", "jazzhop"],
+  "moods": ["calm", "focused", "nocturnal"],
+  "instruments": ["jazzy electric piano", "swung boom-bap drums", "deep round bass", "muted guitar licks", "vinyl crackle"],
+  "bpm_min": 72,
+  "bpm_max": 84,
+  "keys": ["D minor", "F major"],
+  "vocals": "instrumental",
+  "production": "dusty, warm, side-chained, low-passed highs, cassette wobble",
+  "structure": [
+    {"name": "Intro", "seconds": 8},
+    {"name": "Main groove", "seconds": 40},
+    {"name": "Variation", "seconds": 30},
+    {"name": "Main groove", "seconds": 30},
+    {"name": "Outro", "seconds": 10}
+  ],
+  "duration_s": 120,
+  "palette": ["#0b132b", "#1c2541", "#3a506b", "#5bc0be"],
+  "avoid": ["vocals", "bright EDM synths", "fast tempos"],
+  "example_intents": [
+    {"label": "midnight study", "energy": 0.3},
+    {"label": "city rain", "mood": "melancholic", "energy": 0.25},
+    {"label": "neon diner", "mood": "warm and nostalgic", "energy": 0.45},
+    {"label": "last bus home", "mood": "reflective", "energy": 0.35}
+  ]
+}

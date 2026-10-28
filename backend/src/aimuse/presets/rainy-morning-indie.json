@@ -1,0 +1,35 @@
+{
+  "id": "rainy-morning-indie",
+  "name": "Rainy Morning Indie",
+  "description": "Warm, intimate indie folk-pop for slow rainy mornings: soft fingerpicked acoustic guitar, close-miked vocals, gentle brushed drums and a hint of tape warmth.",
+  "genres": ["indie folk", "indie pop"],
+  "moods": ["cosy", "wistful", "hopeful"],
+  "instruments": ["fingerpicked acoustic guitar", "upright piano", "brushed drums", "warm electric bass", "soft string pad"],
+  "bpm_min": 84,
+  "bpm_max": 96,
+  "keys": ["G major", "E minor"],
+  "vocals": "vocals",
+  "vocal_style": "soft, breathy close-miked lead vocal with light harmonies in the chorus",
+  "lyric_language": "English",
+  "lyric_themes": ["rain on the window and a slow morning"],
+  "production": "organic, lo-fi warmth, gentle tape saturation, roomy but intimate mix",
+  "structure": [
+    {"name": "Intro", "seconds": 10},
+    {"name": "Verse 1", "seconds": 25},
+    {"name": "Chorus", "seconds": 20},
+    {"name": "Verse 2", "seconds": 25},
+    {"name": "Chorus", "seconds": 20},
+    {"name": "Outro", "seconds": 10}
+  ],
+  "duration_s": 110,
+  "palette": ["#2f3e46", "#52796f", "#84a98c", "#cad2c5"],
+  "avoid": ["heavy distortion", "trap hi-hats", "aggressive vocals"],
+  "example_intents": [
+    {"label": "first coffee", "theme": "the first coffee while rain taps the window", "energy": 0.3},
+    {"label": "old letters", "theme": "finding old letters in a drawer", "mood": "nostalgic", "energy": 0.25},
+    {"label": "umbrella walk", "theme": "walking to work under a shared umbrella", "energy": 0.55},
+    {"label": "train window", "theme": "watching the city blur past a train window", "mood": "dreamy", "energy": 0.4},
+    {"label": "sun breaks", "theme": "the moment the sun breaks through the clouds", "mood": "uplifting", "energy": 0.7},
+    {"label": "quiet sunday", "theme": "a quiet Sunday with nowhere to be", "energy": 0.2}
+  ]
+}

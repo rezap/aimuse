@@ -251,18 +251,17 @@ class AnalysisModel(Protocol):          # Gemini audio understanding today, swap
 - The LLM layer (prompt compiler, analysis) gets the same treatment, so it is
   not tied to Gemini either.
 
-### 5.4 Proposed repo layout (when coding starts)
+### 5.4 Repo layout
 
 ```
 aimuse/
-  core/        # taste profile, style bible, prompt compiler, ranker, QA (pure Python)
-  engines/     # lyria/, lyria_realtime/, (lyria4/, elevenlabs/ later)
-  analysis/    # descriptors, DSP features, embeddings
-  functions/   # Cloud Functions for Firebase (Python): generation + analysis jobs
-  cli/         # local spike / dev tool
-  web/         # Next.js PWA
-  android/     # later
-  firebase.json, firestore.rules, storage.rules
+  backend/            # Python package `aimuse`: models, prompt compiler, engines,
+    src/aimuse/       # analysis, pipeline, spike experiment, CLI, station presets
+    tests/            # offline tests (fake engine, mocked Lyria API)
+  functions/          # Cloud Functions for Firebase (Python), wraps backend/ (next)
+  web/                # Next.js PWA (next)
+  android/            # later
+  .github/workflows/  # backend-ci.yml (every push), lyria-spike.yml (manual, paid)
   docs/
 ```
 

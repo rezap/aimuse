@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# AI Muse run outputs
+out/
+smoke-out/
+spike-out/
