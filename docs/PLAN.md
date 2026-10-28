@@ -24,43 +24,56 @@ Gemini (Lyria) is the first engine. The architecture keeps engines swappable.
 
 ## 2. Research findings (October 2026)
 
-> ⚠️ `ai.google.dev` was blocked by this session's network policy, so the
-> findings below come from search snippets of Google's docs and from secondary
-> sources. Items marked *(verify)* must be checked against the official docs
-> before we build on them.
+> Section 2.1 was checked against Google's official Gemini API docs (model
+> pages, music generation guide, Lyria RealTime guide, pricing, changelog) on
+> 2026‑10‑28. Items still marked *(verify)* were not covered there.
 
 ### 2.1 Google music models available through the Gemini API
 
-| Model | ID | Use | Output | Price* |
-|---|---|---|---|---|
-| **Lyria 3.5** (public preview, Sept 2026) | `lyria-3.5` | Full songs, vocals and lyrics, up to ~3 min | 44.1 kHz stereo, MP3 by default, WAV optional | ~$0.08 / song |
-| **Lyria 3 Clip** (preview) | `lyria-3-clip-preview` | 30 s clips, loops, previews | 44.1 kHz stereo | ~$0.04 / clip |
-| Lyria 3 Pro (preview) | `lyria-3-pro-preview` *(verify, may be superseded)* | Full songs | — | — |
-| **Lyria RealTime** | `lyria-realtime-exp` *(verify current ID)* | Live, continuous, steerable streaming over WebSocket | PCM stream | — *(verify)* |
+| Model | ID | Status | Use | Output | Price* |
+|---|---|---|---|---|---|
+| **Lyria 3.5** | `lyria-3.5` | Stable / GA since 2026‑09‑03 | Full songs with verses, choruses and bridges, vocals and lyrics; "a couple of minutes", length set in the prompt | 44.1 kHz stereo, MP3 by default, WAV via `response_format`; lyrics and structure as text | $0.08 / song |
+| **Lyria 3 Clip** | `lyria-3-clip-preview` | Preview (legacy family) | Always 30 s: clips, loops, previews | 44.1 kHz stereo MP3 | $0.04 / clip |
+| Lyria 3 Pro | `lyria-3-pro-preview` | Preview (legacy, superseded by 3.5) | Full songs | 44.1 kHz stereo MP3 | $0.08 / song |
+| **Lyria RealTime** | `lyria-realtime-exp` | Experimental | Live, continuous, steerable **instrumental** stream over WebSocket | Raw 16‑bit PCM, 48 kHz stereo, ≤2 s control latency | not listed *(verify)* |
 
-\*Billed per generated song, not per token or second. There is reportedly no free tier.
+\*Billed per generated song, not per token or second. There is no free tier.
+On the paid tier, inputs and outputs are not used to improve Google's products.
 
 Key capabilities and constraints:
 
-- **Inputs:** text, plus image prompts (reportedly up to 10 images). There is
-  **no confirmed audio‑reference or continuation input** *(verify)*.
+- **Inputs:** text, plus up to **10 images** per request. Lyria 3.5 accepts
+  **no audio input**, so it can't take a reference track or continue one.
 - **Single‑turn:** you cannot edit a generated song iteratively. Every change
   is a new generation, so consistency has to come from our side (section 4.3).
-- **Control through the prompt:** tempo, key, structure (`[Verse]`, `[Chorus]`…),
-  lyrics, instrumental/vocal and length all go in the prompt, not in typed
-  parameters *(verify)*.
-- **APIs:** the new **Interactions API** (`client.interactions.create`) is
-  recommended. `generate_content` is now "legacy" but still supported. The
-  Python SDK is `google-genai`.
+- **Control through the prompt:** tempo, key, mood and instrumentation are
+  plain prompt text. Structure uses section tags (`[Verse 1]`, `[Chorus]`,
+  `[Bridge]`) or **timestamps** (`[0:00 - 0:10] Intro: …`), which also set the
+  length. "Instrumental only, no vocals" switches off vocals. Lyria 3.5 has no
+  typed parameters and no seed.
+- **Safety filters** block prompts that ask for a specific artist's voice or
+  for copyrighted lyrics. Our prompt compiler must never name artists.
+- **APIs:** the **Interactions API** (`client.interactions.create`, REST
+  `v1beta/interactions`) is recommended. `generate_content` is legacy but still
+  supported. Python SDK: `google-genai`. Batch, Flex and Priority inference are
+  not supported for Lyria 3.5.
 - **SynthID:** every output carries an inaudible AI watermark.
-- **Lyria RealTime controls:** weighted prompt blending (any non‑zero weight),
-  `bpm` 60–200, `density` 0–1, `brightness` 0–1, `scale`, `guidance` 0–6
-  (default 4), plus mute‑bass/drums style toggles and seed/temperature. BPM
-  and scale only change after a context reset. Density and brightness change
-  live. This makes it ideal for **taste exploration**, not for final renders.
+- **Lyria RealTime controls:** weighted prompt blending, `bpm` 60–200,
+  `density` 0–1, `brightness` 0–1, `scale` (12 key/mode pairs), `guidance` 0–6
+  (default 4), `mute_bass`, `mute_drums`, `only_bass_and_drums`,
+  `music_generation_mode` (QUALITY, DIVERSITY or VOCALIZATION), `temperature`
+  0–3, `top_k` 1–1000 and `seed`. BPM and scale only change after
+  `reset_context()`. The other settings change live. This makes it ideal for
+  **taste exploration**, not for final renders.
 - **Commercial terms:** these appear to fall under the general Gemini API terms
   rather than a music‑specific license. Copyright protection for AI output is
   limited. *(verify before launch; this matters for the "reusable" promise)*
+- **Lyria 4:** not yet listed in the Gemini API docs, model list or changelog
+  as of 2026‑10‑28. It goes on the roadmap (section 6) and will plug in as a
+  new engine adapter.
+- **Gemini Embedding 2** (`gemini-embedding-2`) embeds text, images and
+  **audio** into one vector space (audio input ~$0.00016/s). It is a hosted
+  alternative to CLAP for taste and consistency embeddings (section 2.3).
 
 ### 2.2 Alternative and future engines
 
@@ -86,8 +99,9 @@ LoRA is the eventual "your own sound" differentiator.
     tempo, vocal style, production era, mix character).
   - **DSP features** (librosa / Essentia): BPM, key, loudness, spectral
     brightness, dynamics. These are deterministic and cheap.
-  - **Audio embeddings** (CLAP / MERT): a vector per track to build a taste
-    centroid and measure similarity and consistency.
+  - **Audio embeddings** (Gemini Embedding 2 hosted, or CLAP / MERT
+    self‑hosted): a vector per track to build a taste centroid and measure
+    similarity and consistency.
 - **Other signals:** Last.fm / YouTube Music history (metadata), and, most
   valuable of all, **in‑app behavior** on generated clips.
 - **Legal guardrail:** reference tracks are used only to *derive descriptors*.
@@ -256,10 +270,11 @@ aimuse/
 
 | Phase | Goal | Deliverables | Exit criteria |
 |---|---|---|---|
-| **0. Spike** (≈1 wk) | Prove Lyria quality and consistency tricks | Python CLI that does generate → analyze → loudness‑normalize. Experiments: same Style Bible ×10 tracks, with vs without anchor image. | Measured consistency (embedding similarity, BPM/key adherence) and cost per accepted track |
+| **0. Spike** (≈1 wk) | Prove Lyria 3.5 quality and consistency tricks | Python CLI on `lyria-3.5` (Interactions API) that does generate → analyze → loudness‑normalize. Experiments: same Style Bible ×10 tracks, with vs without anchor image. | Measured consistency (embedding similarity, BPM/key adherence) and cost per accepted track |
 | **1. Core + prototype** (2–3 wks) | Validate the muse loop end‑to‑end | `core/`, `engines/lyria`, `analysis/`. Gradio app: taste quiz, reference upload, one project with a Style Bible, nudges, N‑candidate ranking, downloads with recipe. | 5–10 test users accept ≥1 in 3 tracks without writing a prompt |
 | **2. Backend + web app** (4–6 wks) | A real product | FastAPI, jobs, Postgres/pgvector, GCS, auth, PWA, libraries/projects, exports (loops, stems, cuts), budget/quotas | Stable on Cloud Run with cost dashboards |
 | **3. Live jam & Android** | Mobile‑native experience | Lyria RealTime jam mode, then native Android (or Flutter), offline library | Play‑store internal test |
+| **Lyria 4 upgrade** (when it reaches the Gemini API) | Newest Google model | `LyriaEngine` adapter for Lyria 4 behind a flag; rerun the Phase 0 consistency benchmark on it; switch the default once it wins | Lyria 4 matches or beats 3.5 on consistency and acceptance at acceptable cost |
 | **4. Multi‑engine & personal models** | Better quality and ownership | ElevenLabs/Stable Audio adapters, engine routing by task, ACE‑Step + per‑user LoRA on a GPU worker | A/B: personal LoRA beats base for consistency |
 
 ## 7. Metrics
