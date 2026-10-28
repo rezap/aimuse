@@ -1,0 +1,104 @@
+# Paid experiment: generates real tracks with Lyria and uploads audio + report as an artifact.
+# Runs ONLY when started by hand (Actions tab -> "Lyria spike (paid)" -> Run workflow).
+# Needs the GEMINI_API_KEY secret (repository secret, or a secret on the "lyria" environment,
+# where you can also add required reviewers to approve each run).
+name: Lyria spike (paid)
+
+on:
+  workflow_dispatch:
+    inputs:
+      preset:
+        description: Station (style bible) to test
+        type: choice
+        options: [rainy-morning-indie, late-night-lofi, sunset-synthpop]
+        default: rainy-morning-indie
+      tracks:
+        description: Tracks per arm
+        type: number
+        default: 3
+      candidates:
+        description: Candidates per track (best one is kept)
+        type: number
+        default: 1
+      arms:
+        description: "text = prompt only, image = prompt + anchor image"
+        type: choice
+        options: ["text,image", "text", "image"]
+        default: "text,image"
+      model:
+        type: choice
+        options: [lyria-3.5, lyria-3-clip-preview]
+        default: lyria-3.5
+      format:
+        description: Audio format (wav only with lyria-3.5)
+        type: choice
+        options: [mp3, wav]
+        default: mp3
+      max_cost_usd:
+        description: Hard spending cap in USD (max 20). Requests stop before exceeding it.
+        type: string
+        default: "1.00"
+      normalize:
+        description: Also write -14 LUFS FLAC versions of the chosen tracks
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lyria-spike
+  cancel-in-progress: false
+
+jobs:
+  spike:
+    runs-on: ubuntu-latest
+    environment: lyria
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install
+        run: pip install .
+      - name: Check API key
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::GEMINI_API_KEY secret is not set (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+      - name: Generate and analyse
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PRESET: ${{ inputs.preset }}
+          TRACKS: ${{ inputs.tracks }}
+          CANDIDATES: ${{ inputs.candidates }}
+          ARMS: ${{ inputs.arms }}
+          MODEL: ${{ inputs.model }}
+          FORMAT: ${{ inputs.format }}
+          MAX_COST: ${{ inputs.max_cost_usd }}
+          NORMALIZE: ${{ inputs.normalize }}
+        run: |
+          extra=()
+          if [ "$NORMALIZE" = "true" ]; then extra+=(--normalize); fi
+          aimuse spike --engine lyria --preset "$PRESET" --tracks "$TRACKS" \
+            --candidates "$CANDIDATES" --arms "$ARMS" --model "$MODEL" --format "$FORMAT" \
+            --max-cost "$MAX_COST" --out ../spike-out "${extra[@]}"
+      - name: Report
+        if: always()
+        run: if [ -f ../spike-out/report.md ]; then cat ../spike-out/report.md >> "$GITHUB_STEP_SUMMARY"; fi
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: lyria-spike-${{ github.run_number }}-${{ inputs.preset }}
+          path: spike-out
+          retention-days: 14
+          if-no-files-found: warn

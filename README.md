@@ -6,6 +6,9 @@ downloadable tracks without making you write prompts. It starts with Google's
 Lyria models through the Gemini API and keeps the engine layer pluggable.
 
 - 📄 **[Research & product plan](docs/PLAN.md)** covers the vision, model
-  research, architecture, roadmap and open questions.
+  research, architecture, roadmap and decisions.
+- 🎛️ **[Backend core](backend/README.md)** is the Python package that compiles
+  prompts, calls Lyria, analyses and ranks tracks. Its tests run on GitHub
+  Actions, and a manually started workflow runs paid Lyria experiments.
 
-Status: planning. No code yet.
+Status: Phase 0. The core backend and the Lyria experiment are in place.
