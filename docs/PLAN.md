@@ -1,7 +1,7 @@
 # AI Muse — Research & Product Plan
 
-> Status: **draft for discussion** (2026‑10‑28). No tech stack is locked in yet;
-> section 5 makes a recommendation and lists the alternatives.
+> Status: **plan agreed** (2026‑10‑28). The owner's decisions are in section 9;
+> the rest of the plan has been updated to match them.
 
 ## 1. Vision
 
@@ -15,8 +15,12 @@ Four product pillars, in order of importance:
 |---|---|
 | **No prompt barrier** | Pick, swipe, compare and nudge. Text is optional. |
 | **Adjusts to taste** | Every like, skip, A/B pick and reference track refines a persistent taste profile. |
-| **Consistency** | Tracks in a project (a podcast, a game, a channel, an album) sound like they belong together. |
-| **Quality & reuse** | Clean, loudness‑matched files, loops and stems with metadata and a license manifest. You can regenerate any track from its recipe. |
+| **Consistency** | Tracks in a station or album (e.g. "rainy‑morning indie", "gym mix") sound like they belong together. |
+| **Quality & reuse** | Clean, loudness‑matched songs you can download and replay, with metadata and a license note. You can regenerate any track from its recipe. |
+
+**First audience: personal listening.** Users get full songs with vocals and
+AI‑written lyrics (instrumental is one tap away), organised into personal
+stations and albums. Creator features (loops, stems, licensing) come later.
 
 Gemini (Lyria) is the first engine. The architecture keeps engines swappable.
 
@@ -84,8 +88,10 @@ Key capabilities and constraints:
 | **Suno** | Best‑in‑class vocal songs | API access is murky (mostly third‑party wrappers). Avoid at first. |
 | **ACE‑Step 1.5 / 1.5 XL** (open source, MIT) | Self‑hostable, fast (<4 GB VRAM claimed), **LoRA fine‑tuning on ~8 songs** | The strongest long‑term path to a truly *personal* style |
 
-Takeaway: hosted APIs give quality and zero ops today. Self‑hosted ACE‑Step +
-LoRA is the eventual "your own sound" differentiator.
+Takeaway: hosted APIs give quality and zero ops. **Decision: AI Muse stays
+API‑only** (no self‑hosted models or GPUs). ACE‑Step is listed for reference
+only. Engines we may add later are hosted ones: Lyria 4, ElevenLabs Music,
+Stable Audio.
 
 ### 2.3 Analyzing a user's existing interests
 
@@ -99,8 +105,7 @@ LoRA is the eventual "your own sound" differentiator.
     tempo, vocal style, production era, mix character).
   - **DSP features** (librosa / Essentia): BPM, key, loudness, spectral
     brightness, dynamics. These are deterministic and cheap.
-  - **Audio embeddings** (Gemini Embedding 2 hosted, or CLAP / MERT
-    self‑hosted): a vector per track to build a taste centroid and measure
+  - **Audio embeddings** (Gemini Embedding 2): a vector per track to build a taste centroid and measure
     similarity and consistency.
 - **Other signals:** Last.fm / YouTube Music history (metadata), and, most
   valuable of all, **in‑app behavior** on generated clips.
@@ -182,16 +187,15 @@ Lyria can't continue or edit a track, so consistency is engineered:
 6. **Post‑processing:** LUFS loudness normalization (e.g. ‑14 LUFS streaming
    or ‑16 podcast), true‑peak limiting, fades, and bar‑aligned trimming for
    loops.
-7. **Later:** ACE‑Step LoRA trained on the user's *own accepted generations*
-   gives the strongest consistency and keeps clear ownership.
 
 ### 4.4 Quality, download and reuse
 
 - **Automatic QA:** clipping, silence, abrupt endings, duration, spec match,
   and an optional Gemini "listening judge" score.
-- **Exports:** WAV/MP3/FLAC, plus loop versions (seamless crossfade at bar
-  boundaries), stems via Demucs separation (vocals/drums/bass/other), and
-  short/long cuts (15 s / 30 s / 60 s).
+- **Exports (launch):** MP3 and WAV downloads, lyrics, cover art, and offline
+  playback in the web app.
+- **Exports (later, for creators):** loop versions (seamless crossfade at bar
+  boundaries), stems via Demucs separation, and 15/30/60 s cuts.
 - **Metadata:** ID3/BWF tags (BPM, key, LUFS, project) and a sidecar
   `recipe.json`, plus a **license manifest** (engine, terms version, SynthID
   note, date).
@@ -207,26 +211,23 @@ Lyria can't continue or edit a track, so consistency is engineered:
 - API keys and billing must never ship inside a mobile app.
 - Generation takes tens of seconds and needs **async jobs**, retries and
   budget caps.
-- The audio tooling (librosa, Essentia, CLAP, Demucs, pyloudnorm) is
-  overwhelmingly **Python**, which matches the existing `.gitignore`.
+- The audio tooling (librosa, Essentia, pyloudnorm) is overwhelmingly
+  **Python**, which matches the existing `.gitignore`.
 - One backend serves web, Android and any future client.
 
-### 5.2 Proposed stack
+### 5.2 Stack (decided: web app first, on Firebase)
 
-| Layer | Recommendation | Alternatives |
+| Layer | Choice | Notes |
 |---|---|---|
-| Core engine library | **Python 3.12+**, `google-genai`, pydantic | — |
-| API | **FastAPI** + async job queue (Arq/RQ on Redis, or Cloud Tasks) | Django, Litestar |
-| Storage | **Postgres + pgvector** (SQLite for local dev); object storage on **GCS** (S3 compatible) | Firestore + Vertex Vector Search |
-| Audio processing | librosa, Essentia, pyloudnorm, ffmpeg, Demucs, LAION‑CLAP | MERT embeddings |
-| Prototype UI | **Gradio** (days, not weeks) | Streamlit |
-| Product client v1 | **Web PWA** (SvelteKit or Next.js). Installable on Android and fast to iterate. | Flutter (web + Android from one codebase) |
-| Native Android (later) | **Kotlin + Jetpack Compose + Media3/ExoPlayer**, offline library, background playback | Flutter, Kotlin Multiplatform (adds iOS) |
-| Hosting | **Cloud Run** (same cloud as Gemini; scale to zero) + GPU worker later for ACE‑Step | Fly.io, Modal (GPU) |
-| Auth | Firebase Auth / Google Sign‑In | Supabase |
-
-The client decision between a PWA first and a Flutter app first is the main
-open question (section 9).
+| Web client | **Next.js PWA on Firebase App Hosting** | Installable on Android; player‑first UI for personal listening; offline cache of downloaded songs |
+| Auth | **Firebase Auth** (Google Sign‑In) | Same accounts later for an Android app |
+| Database | **Cloud Firestore** | Users, taste profiles, stations, tracks, recipes, jobs. Firestore vector search holds track and taste embeddings. |
+| Files | **Cloud Storage for Firebase** | Generated audio, cover art, user‑uploaded reference tracks (private per user) |
+| Generation & analysis | **Python 3.12 on Cloud Functions for Firebase (2nd gen, runs on Cloud Run)** | Triggered by a Firestore job document; calls Lyria and Gemini, analyses and normalises audio, writes results back. Clients never hold the Gemini API key. |
+| Core library | **Python**: `google-genai`, pydantic, librosa, pyloudnorm, ffmpeg | Shared by the functions and a local CLI |
+| Embeddings | **Gemini Embedding 2** (hosted, audio + text) | No self‑hosted models (API‑only decision) |
+| Prototype / dev tools | Python CLI (+ optional Gradio) | For the Phase 0 spike only |
+| Android (later) | Kotlin + Jetpack Compose + Media3, same Firebase backend | After the web app proves the loop |
 
 ### 5.3 Provider abstraction (pluggable engines)
 
@@ -245,7 +246,8 @@ class AnalysisModel(Protocol):          # Gemini audio understanding today, swap
 - The **Taste Profile, Style Bible, ranker and QA are engine‑agnostic.** Only
   `compile()` knows an engine's prompt dialect.
 - Initial adapters: `LyriaEngine` (3.5 + Clip) and `LyriaRealtimeSession`.
-  Next: `ElevenLabsMusicEngine`, `StableAudioEngine`, `AceStepEngine` (self‑hosted).
+  Next: Lyria 4 when it lands, then optionally `ElevenLabsMusicEngine` and
+  `StableAudioEngine` (all hosted APIs).
 - The LLM layer (prompt compiler, analysis) gets the same treatment, so it is
   not tied to Gemini either.
 
@@ -254,13 +256,13 @@ class AnalysisModel(Protocol):          # Gemini audio understanding today, swap
 ```
 aimuse/
   core/        # taste profile, style bible, prompt compiler, ranker, QA (pure Python)
-  engines/     # lyria/, lyria_realtime/, elevenlabs/, ace_step/ …
+  engines/     # lyria/, lyria_realtime/, (lyria4/, elevenlabs/ later)
   analysis/    # descriptors, DSP features, embeddings
-  api/         # FastAPI app + job workers
-  apps/
-    prototype/ # Gradio
-    web/       # PWA
-    android/   # later
+  functions/   # Cloud Functions for Firebase (Python): generation + analysis jobs
+  cli/         # local spike / dev tool
+  web/         # Next.js PWA
+  android/     # later
+  firebase.json, firestore.rules, storage.rules
   docs/
 ```
 
@@ -271,11 +273,12 @@ aimuse/
 | Phase | Goal | Deliverables | Exit criteria |
 |---|---|---|---|
 | **0. Spike** (≈1 wk) | Prove Lyria 3.5 quality and consistency tricks | Python CLI on `lyria-3.5` (Interactions API) that does generate → analyze → loudness‑normalize. Experiments: same Style Bible ×10 tracks, with vs without anchor image. | Measured consistency (embedding similarity, BPM/key adherence) and cost per accepted track |
-| **1. Core + prototype** (2–3 wks) | Validate the muse loop end‑to‑end | `core/`, `engines/lyria`, `analysis/`. Gradio app: taste quiz, reference upload, one project with a Style Bible, nudges, N‑candidate ranking, downloads with recipe. | 5–10 test users accept ≥1 in 3 tracks without writing a prompt |
-| **2. Backend + web app** (4–6 wks) | A real product | FastAPI, jobs, Postgres/pgvector, GCS, auth, PWA, libraries/projects, exports (loops, stems, cuts), budget/quotas | Stable on Cloud Run with cost dashboards |
-| **3. Live jam & Android** | Mobile‑native experience | Lyria RealTime jam mode, then native Android (or Flutter), offline library | Play‑store internal test |
+| **1. Core + Firebase backend** (2–3 wks) | The muse loop running in the cloud | `core/`, `engines/lyria`, `analysis/`, Python Cloud Functions job pipeline, Firestore schema + security rules, Storage, budgets | A track request from a test client produces a ranked, normalised song with lyrics and recipe |
+| **2. Web app MVP** (4–6 wks) | A real product for personal listening | Next.js PWA: sign‑in, taste quiz, reference upload, stations/albums with Style Bibles, player, nudges, likes/skips feedback, downloads | 5–10 test users accept ≥1 in 3 tracks without writing a prompt |
+| **3. Live jam & Android** | Mobile‑native experience | Lyria RealTime jam mode, then a native Android app on the same Firebase backend | Play‑store internal test |
+| **Creator features** (if the audience widens) | Reuse in videos, podcasts, games | Loops, stems, cuts, licensing decision (section 9) | Legal review done |
 | **Lyria 4 upgrade** (when it reaches the Gemini API) | Newest Google model | `LyriaEngine` adapter for Lyria 4 behind a flag; rerun the Phase 0 consistency benchmark on it; switch the default once it wins | Lyria 4 matches or beats 3.5 on consistency and acceptance at acceptable cost |
-| **4. Multi‑engine & personal models** | Better quality and ownership | ElevenLabs/Stable Audio adapters, engine routing by task, ACE‑Step + per‑user LoRA on a GPU worker | A/B: personal LoRA beats base for consistency |
+| **4. More hosted engines** (optional) | Better quality per task | ElevenLabs/Stable Audio adapters and engine routing by task | An engine wins A/B tests on acceptance or cost |
 
 ## 7. Metrics
 
@@ -291,27 +294,24 @@ aimuse/
 | Risk | Mitigation |
 |---|---|
 | Preview models change, get renamed or are retired | Engine adapters, versioned recipes, contract tests per engine |
-| No audio conditioning or editing in Lyria | Style Bible + anchor image + N‑best ranking; ACE‑Step later |
-| Cost runaway from rerolls and candidates | Per‑user budgets, cached quiz clips, Clip model for drafts and Pro/3.5 for finals |
+| No audio conditioning or editing in Lyria | Style Bible + anchor image + N‑best ranking; re‑evaluate with Lyria 4 |
+| Cost runaway from rerolls and candidates | Per‑user budgets, cached quiz clips, Clip model ($0.04) for drafts and previews, Lyria 3.5 ($0.08) for finals |
 | Copyright and imitation | Descriptor‑only references, no artist names in prompts, SynthID retained, terms reviewed before launch |
 | Commercial‑use ambiguity | Show the license manifest per track; get a legal review before monetizing |
 | Spotify API limits | Treat as optional metadata; audio analysis is the primary signal |
 | Latency (tens of seconds) | Async jobs + notifications; RealTime for instant feedback |
 
-## 9. Open questions for you
+## 9. Decisions (2026‑10‑28)
 
-1. **Primary first client:** a web PWA (fastest, works on Android) or go
-   straight to Android (native Kotlin or Flutter)?
-2. **Target users and use cases:** personal listening, creators needing
-   background music (YouTube, podcasts, games), or musicians looking for
-   ideas? This changes the defaults (instrumental vs vocals, loops vs songs).
-3. **Vocals and lyrics:** day‑one feature, or instrumentals first?
-4. **Monetization and licensing:** will users publish tracks commercially?
-   That decides how much legal review comes before launch.
-5. **Cloud:** OK to standardize on Google Cloud (Cloud Run + GCS) next to
-   Gemini?
-6. **Self‑hosting appetite:** is a GPU worker for ACE‑Step in scope later, or
-   should we stay API‑only?
+| # | Question | Decision |
+|---|---|---|
+| 1 | First app | **Web app (PWA)** first; native Android later |
+| 2 | First audience | **Personal listening** |
+| 3 | Vocals and lyrics | **Vocals with AI‑written lyrics** by default; instrumental as an option |
+| 4 | Commercial use of tracks | **Not decided.** Keep a per‑track license note and decide before public launch (legal review of Google's terms). |
+| 5 | Hosting | **Firebase** (App Hosting, Auth, Firestore, Storage, Python Cloud Functions) |
+| 6 | Own models on GPUs | **No — API‑only for good.** Hosted engines only. |
+| — | Music model | **Start with Lyria 3.5**; add **Lyria 4** as soon as it is in the Gemini API |
 
 ## 10. Sources
 
