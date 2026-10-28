@@ -4,7 +4,7 @@ import pytest
 import soundfile as sf
 
 from aimuse.engines import EngineError, FakeEngine
-from muse_jobs import JobRequest, process_job
+from muse_jobs import JobRequest, display_bpm, process_job
 
 
 class MemoryStore:
@@ -133,3 +133,10 @@ def test_request_to_intent():
     r = JobRequest.model_validate(data)
     i = r.to_intent()
     assert i.vocals.value == "instrumental" and i.theme is None and i.label == "calm"
+
+
+def test_display_bpm_folds_half_and_double_time():
+    assert display_bpm(152.0, 78) == 76.0
+    assert display_bpm(44.0, 90) == 88.0
+    assert display_bpm(100.0, 100) == 100.0
+    assert display_bpm(None, 90) is None

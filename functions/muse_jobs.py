@@ -67,6 +67,14 @@ class JobFailed(Exception):
 _EXT = {"audio/mp3": "mp3", "audio/mpeg": "mp3", "audio/wav": "wav"}
 
 
+def display_bpm(measured: float | None, target: int) -> float | None:
+    """Tempo detectors often report half or double time (e.g. 152 for a 76 BPM lo-fi beat).
+    Show the octave of the measured tempo that is closest to what was asked for."""
+    if not measured:
+        return measured
+    return round(min((measured * f for f in (0.5, 1.0, 2.0)), key=lambda b: abs(b - target)), 1)
+
+
 def _title(req: JobRequest, station_name: str) -> str:
     if req.theme and req.theme.strip():
         t = req.theme.strip()
@@ -146,7 +154,7 @@ def process_job(
                 "audioPath": path,
                 "mimeType": mime,
                 "durationS": a.duration_s if a else None,
-                "bpm": a.bpm if a else None,
+                "bpm": display_bpm(a.bpm, track.target.bpm) if a else None,
                 "key": a.key if a else None,
                 "lufs": a.lufs if a else None,
                 "targetBpm": track.target.bpm,
