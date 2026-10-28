@@ -24,6 +24,12 @@ const config = useEmulators
 
 export const firebaseConfigured = Boolean(config.apiKey && config.projectId);
 
+// Without settings the SDK would throw at import and break the build; use placeholders so the
+// page still renders and shows the "not configured" notice instead.
+if (!firebaseConfigured) {
+  Object.assign(config, { apiKey: "not-configured", projectId: "not-configured" });
+}
+
 const app = getApps()[0] ?? initializeApp(config);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
