@@ -27,6 +27,9 @@ Later, Firebase Cloud Functions and the web app will call this same package.
 
 - **Backend CI** runs on every push and PR that touches `backend/`. It runs lint, the
   offline tests, and a smoke run with the fake engine. It needs no key and costs nothing.
+- **Live API tests (paid, about $0.04)**: go to **Actions → Backend CI → Run workflow**, tick
+  **live**, and it makes one real `lyria-3-clip-preview` request and checks the audio. These
+  tests never run on push or PR. Locally: `AIMUSE_LIVE=1 GEMINI_API_KEY=... pytest -m live`.
 - **Lyria spike (paid)** runs only when you start it:
   1. Add your key once: repo **Settings → Secrets and variables → Actions → New repository
      secret**, named `GEMINI_API_KEY`. For an approval step on every run, add the secret to

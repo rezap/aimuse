@@ -33,6 +33,7 @@ aimuse = ["presets/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["live: calls the paid Lyria API (skipped unless AIMUSE_LIVE=1 and GEMINI_API_KEY)"]
 
 [tool.ruff]
 line-length = 100

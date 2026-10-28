@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from aimuse.models import Intent, Section, StyleBible
@@ -22,3 +24,13 @@ def style() -> StyleBible:
         palette=["#000000", "#ffffff"],
         example_intents=[Intent(label="one", theme="a"), Intent(label="two", theme="b")],
     )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Live tests call the paid Lyria API: run them only when AIMUSE_LIVE=1 and a key is set."""
+    if os.environ.get("AIMUSE_LIVE") == "1" and os.environ.get("GEMINI_API_KEY"):
+        return
+    skip = pytest.mark.skip(reason="live API test: set AIMUSE_LIVE=1 and GEMINI_API_KEY to run")
+    for item in items:
+        if "live" in item.keywords:
+            item.add_marker(skip)

@@ -7,6 +7,11 @@ on:
   pull_request:
     paths: ["backend/**", ".github/workflows/backend-ci.yml"]
   workflow_dispatch:
+    inputs:
+      live:
+        description: Also run live Lyria API tests (paid, about $0.04 per run)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -43,3 +48,33 @@ jobs:
           path: smoke-out
           retention-days: 3
           if-no-files-found: ignore
+
+  live:
+    # Paid: runs only when started by hand with "live" ticked. Never on push or PR.
+    if: github.event_name == 'workflow_dispatch' && inputs.live
+    needs: test
+    runs-on: ubuntu-latest
+    environment: lyria
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Live Lyria tests
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          AIMUSE_LIVE: "1"
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::error::GEMINI_API_KEY secret is not set."
+            exit 1
+          fi
+          pytest -m live -v -s
