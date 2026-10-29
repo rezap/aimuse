@@ -7,6 +7,8 @@ Settings (functions/.env, or the environment):
   AIMUSE_ENGINE     lyria (default) | fake  - "fake" makes synthetic audio, for the emulator
   AIMUSE_MODEL      lyria-3.5 (default) | lyria-3-clip-preview
   AIMUSE_DAILY_USD  per-user daily spending cap, default 1.00
+  AIMUSE_ALLOWED_EMAILS  comma-separated emails allowed to make songs (invite-only).
+                    Empty = nobody, "*" = anyone signed in.
 Secret: GEMINI_API_KEY (`firebase functions:secrets:set GEMINI_API_KEY`).
 """
 
@@ -15,7 +17,7 @@ from __future__ import annotations
 import json
 import os
 
-from firebase_admin import firestore, initialize_app, storage
+from firebase_admin import auth, firestore, initialize_app, storage
 from firebase_functions import firestore_fn, options
 from firebase_functions.params import SecretParam
 
@@ -50,6 +52,21 @@ def _clients():
     return db, bucket
 
 
+def _is_allowed(uid: str) -> bool:
+    """Invite-only: the user's (verified) email must be in AIMUSE_ALLOWED_EMAILS."""
+    allowed = {
+        e.strip().lower()
+        for e in os.environ.get("AIMUSE_ALLOWED_EMAILS", "").split(",")
+        if e.strip()
+    }
+    if "*" in allowed:
+        return True
+    if not allowed:
+        return False
+    user = auth.get_user(uid)
+    return bool(user.email and user.email_verified and user.email.lower() in allowed)
+
+
 def _engine():
     from aimuse.engines import FakeEngine, LyriaEngine
 
@@ -74,4 +91,5 @@ def on_job_created(event: firestore_fn.Event) -> None:
         audio=StorageAudioStore(bucket),
         engine_factory=_engine,
         daily_cap_usd=float(os.environ.get("AIMUSE_DAILY_USD", "1.00")),
+        is_allowed=_is_allowed,
     )

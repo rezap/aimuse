@@ -4,6 +4,8 @@
 #   secret   GEMINI_API_KEY            (already set) copied into Secret Manager when asked
 #   variables FIREBASE_PROJECT_ID, FIREBASE_API_KEY, FIREBASE_AUTH_DOMAIN,
 #             FIREBASE_STORAGE_BUCKET, FIREBASE_APP_ID   (web app config, not secret)
+#             ALLOWED_EMAILS  comma-separated emails that may make songs (invite-only)
+#             DAILY_USD       optional per-user daily cap (default 1.00)
 name: Deploy to Firebase
 
 on:
@@ -56,6 +58,7 @@ jobs:
           [ -n "$PROJECT" ] || missing+=(FIREBASE_PROJECT_ID)
           [ -n "$NEXT_PUBLIC_FIREBASE_API_KEY" ] || missing+=(FIREBASE_API_KEY)
           [ -n "$SA" ] || missing+=("FIREBASE_SERVICE_ACCOUNT (secret)")
+          [ -n "${{ vars.ALLOWED_EMAILS }}" ] || missing+=(ALLOWED_EMAILS)
           if [ ${#missing[@]} -gt 0 ]; then
             echo "::error::Missing settings: ${missing[*]}. See docs/APP.md."
             exit 1
@@ -67,7 +70,12 @@ jobs:
           printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
       - name: Prepare functions environment
+        env:
+          ALLOWED_EMAILS: ${{ vars.ALLOWED_EMAILS }}
+          DAILY_USD: ${{ vars.DAILY_USD }}
         run: |
+          printf 'AIMUSE_ALLOWED_EMAILS=%s\nAIMUSE_DAILY_USD=%s\n' \
+            "$ALLOWED_EMAILS" "${DAILY_USD:-1.00}" > functions/.env
           python -m venv functions/venv
           functions/venv/bin/pip install -q -r functions/requirements.txt
       - name: Update Gemini key in Secret Manager

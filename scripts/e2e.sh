@@ -9,7 +9,7 @@ if [ ! -x functions/venv/bin/python ]; then
   functions/venv/bin/pip install -q -r functions/requirements.txt
 fi
 rm -rf functions/aimuse && cp -r backend/src/aimuse functions/aimuse
-printf 'AIMUSE_ENGINE=fake\nAIMUSE_DAILY_USD=5\n' > functions/.env.local
+printf 'AIMUSE_ENGINE=fake\nAIMUSE_DAILY_USD=5\nAIMUSE_ALLOWED_EMAILS=*\n' > functions/.env.local
 [ -f functions/.secret.local ] || printf 'GEMINI_API_KEY=not-needed-for-fake-engine\n' > functions/.secret.local
 
 # Production build of the web app, pointed at the emulators, served as static files.

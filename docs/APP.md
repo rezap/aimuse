@@ -19,6 +19,9 @@
 - **Security**: `firestore.rules` and `storage.rules`. Users only see their own data. The app
   can only *queue* a valid request, and only the function writes songs. Users can rate or
   delete their own songs. Tests are in `web/tests/rules.test.mjs`.
+- **Invite-only**: only signed-in users whose verified Google email is in
+  `AIMUSE_ALLOWED_EMAILS` (in `functions/.env`) can make songs. Everyone else gets a polite
+  "invite-only" message, and nothing is spent. `*` lets anyone in.
 - **Cost control**: the function reserves the request's price against a per-user daily cap
   (`AIMUSE_DAILY_USD`, default $1.00 = 12 full songs) *before* calling Lyria. Duplicate
   trigger deliveries are ignored, because a job is claimed only once.
@@ -48,7 +51,43 @@ set `AIMUSE_ENGINE=lyria` in `functions/.env.local` and your key in `functions/.
 
 Run the end-to-end test yourself with `./scripts/e2e.sh`.
 
-## Deploy (when you're ready)
+## Deploy from Google Cloud Shell (simplest first deploy)
+
+In the Firebase console, first:
+1. Switch the project to the **Blaze** plan and set a budget alert.
+2. **Authentication** → Get started → **Google** → Enable.
+3. **Firestore Database** → Create database → production mode, location `nam5 (us-central)`.
+4. **Storage** → Get started → production mode, same location.
+
+Then, in Cloud Shell:
+
+```bash
+git clone https://github.com/rezap/aimuse.git && cd aimuse
+firebase login --no-localhost                       # skip if already logged in
+firebase use --add YOUR_PROJECT_ID                  # pick the project, alias "default"
+
+# Web app config -> web/.env.local
+firebase apps:create web aimuse-web                 # once; prints an App ID
+firebase apps:sdkconfig web                          # shows apiKey, authDomain, ...
+#   copy those into web/.env.local (see web/.env.example for the names)
+
+# Who may make songs, and the daily cap per person
+printf 'AIMUSE_ALLOWED_EMAILS=you@gmail.com\nAIMUSE_DAILY_USD=1.00\n' > functions/.env
+
+# Gemini key into Secret Manager (paste it when asked)
+firebase functions:secrets:set GEMINI_API_KEY
+
+# Python 3.12 environment the Firebase CLI uses to read the functions
+python3.12 -m venv functions/venv && functions/venv/bin/pip install -r functions/requirements.txt
+
+firebase deploy
+```
+
+Open `https://YOUR_PROJECT_ID.web.app`. If the first deploy fails on functions with a
+permissions or "Eventarc" message, wait 2–3 minutes and run `firebase deploy --only functions`
+again; new projects need a moment for permissions to spread.
+
+## Deploy from GitHub Actions (repeatable)
 
 One-time setup:
 
@@ -69,6 +108,8 @@ One-time setup:
    - Variables `FIREBASE_PROJECT_ID`, `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`,
      `FIREBASE_STORAGE_BUCKET`, `FIREBASE_APP_ID`: from the web app config. These aren't
      secret; they ship in the web page.
+   - Variable `ALLOWED_EMAILS`: comma-separated emails allowed to make songs. Optional:
+     `DAILY_USD`.
    - Optional: under **Environments → production**, add yourself as a required reviewer.
 5. Actions → **Deploy to Firebase** → Run workflow. Tick **update_gemini_secret** the first
    time, so your `GEMINI_API_KEY` is copied into Firebase Secret Manager.

@@ -43,7 +43,7 @@ class MemoryAudio:
         self.files[path] = (data, content_type)
 
 
-def _run(store, audio, engine=None, cap=1.0, job_id="j1"):
+def _run(store, audio, engine=None, cap=1.0, job_id="j1", allowed=True):
     return process_job(
         "u1",
         job_id,
@@ -51,6 +51,7 @@ def _run(store, audio, engine=None, cap=1.0, job_id="j1"):
         audio=audio,
         engine_factory=lambda: engine or FakeEngine(max_seconds=10, cost_usd=0.08),
         daily_cap_usd=cap,
+        is_allowed=lambda uid: allowed,
     )
 
 
@@ -140,3 +141,11 @@ def test_display_bpm_folds_half_and_double_time():
     assert display_bpm(44.0, 90) == 88.0
     assert display_bpm(100.0, 100) == 100.0
     assert display_bpm(None, 90) is None
+
+
+def test_not_invited_user_is_refused_before_any_spend():
+    engine = FakeEngine(max_seconds=10, cost_usd=0.08)
+    store = MemoryStore({"j1": _job()})
+    assert _run(store, MemoryAudio(), engine, allowed=False) == "failed"
+    assert "invite-only" in store.jobs["j1"]["error"]
+    assert engine.calls == 0 and store.spend == {}
