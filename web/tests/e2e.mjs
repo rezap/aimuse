@@ -26,6 +26,11 @@ try {
   if (audio.status() !== 200 || (await audio.body()).length < 10000) {
     throw new Error(`audio download failed: ${audio.status()}`);
   }
+  await page.locator("li.track summary", { hasText: "Lyrics" }).first().click();
+  const lyrics = await page.locator("li.track .lyrics").first().innerText();
+  if (!lyrics.includes("Fake engine sings softly") || lyrics.includes("[0.0")) {
+    throw new Error(`lyrics not cleaned up: ${JSON.stringify(lyrics)}`);
+  }
   await page.getByRole("button", { name: "👍" }).first().click();
   await page.locator('button[aria-pressed="true"]').first().waitFor({ timeout: 10000 });
   await shot("2-library");
