@@ -81,9 +81,14 @@ def compile_prompt(
     moods = [intent.mood] if intent.mood else style.moods
 
     sung = target.vocals == Vocals.VOCALS
+    inf = intent.influences
 
     lines = [style.description.strip()]
     lines.append(f"Genre: {', '.join(style.genres)}.")
+    if inf and not inf.is_empty():
+        # The listener's artist reference, already translated into name-free traits.
+        era = f" ({inf.era})" if inf.era else ""
+        lines.append(f"Style influences: {', '.join(inf.genres)}{era}, blended with the above.")
     if sung:
         # Say it early and plainly: station descriptions can read as instrumental.
         lines.append("This is a song with a lead singer and sung lyrics, not an instrumental.")
@@ -91,25 +96,37 @@ def compile_prompt(
         lines.append(f"Mood: {', '.join(moods)}.")
     if intent.energy is not None:
         lines.append(f"Energy: {_energy_words(intent.energy)}.")
-    if style.instruments:
-        lines.append(f"Instrumentation: {', '.join(style.instruments)}.")
+    instruments = list(style.instruments)
+    if inf:
+        instruments += [i for i in inf.instrumentation if i not in instruments]
+    if instruments:
+        lines.append(f"Instrumentation: {', '.join(instruments)}.")
     lines.append(f"Tempo: {target.bpm} BPM.")
     if target.key:
         lines.append(f"Key: {target.key}.")
-    if style.production:
-        lines.append(f"Production: {style.production}.")
+    production = [p for p in (style.production, inf.production if inf else None) if p]
+    if production:
+        lines.append(f"Production: {'; '.join(production)}.")
 
     if sung:
         theme = intent.theme or (style.lyric_themes[0] if style.lyric_themes else None)
-        voice = style.vocal_style or "warm, expressive lead vocal with light backing harmonies"
+        voice = (
+            (inf.vocal_delivery if inf else None)
+            or style.vocal_style
+            or "warm, expressive lead vocal with light backing harmonies"
+        )
         lines.append(f"Vocals: {voice}.")
         about = f" and describe {theme}" if theme else ""
         lines.append(f"The lyrics are original, in {style.lyric_language}{about}.")
+        if inf and inf.lyric_style:
+            lines.append(f"Lyric style: {inf.lyric_style}.")
     else:
         lines.append("Instrumental only, no vocals.")
 
     if intent.text:
         lines.append(intent.text.strip())
+    if inf:
+        lines.append("Make it an original song; do not imitate any specific artist or song.")
     # The listener's vocals choice wins over the station's "avoid" list (e.g. "Avoid: vocals" on
     # an instrumental station when they asked for vocals).
     avoid = [a for a in style.avoid if not _mentions_vocals(a)]

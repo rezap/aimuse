@@ -34,6 +34,9 @@ export type Track = {
   theme: string | null;
   vocals: boolean;
   vocalsDelivered?: boolean | null;
+  inspiration?: string | null;
+  influences?: string | null;
+  inspirationNote?: string | null;
   audioPath: string;
   mimeType: string;
   durationS: number | null;

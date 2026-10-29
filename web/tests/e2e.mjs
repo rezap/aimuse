@@ -16,6 +16,7 @@ try {
   await page.getByRole("radio", { name: /Late Night Lo-fi/ }).click();
   await page.getByRole("button", { name: "calm", exact: true }).click();
   await page.locator("#theme").fill("rain on a neon city");
+  await page.locator("#inspiration").fill("Bob Dylan");
   await shot("1-composer");
   await page.getByRole("button", { name: "Make it" }).click();
   await page.locator("li.track audio").first().waitFor({ timeout: 180000 });
@@ -25,6 +26,10 @@ try {
   const audio = await page.request.get(src);
   if (audio.status() !== 200 || (await audio.body()).length < 10000) {
     throw new Error(`audio download failed: ${audio.status()}`);
+  }
+  const influence = await page.locator("li.track .influence").first().innerText();
+  if (!influence.includes("In the spirit of Bob Dylan") || !influence.includes("folk rock")) {
+    throw new Error(`artist style not shown: ${JSON.stringify(influence)}`);
   }
   await page.locator("li.track summary", { hasText: "Lyrics" }).first().click();
   const lyrics = await page.locator("li.track .lyrics").first().innerText();

@@ -9,6 +9,7 @@ with the "live" input ticked.
 """
 
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -132,3 +133,45 @@ def test_vocals_requested_are_sung(station, model, tmp_path):
         first_lines = " / ".join(lyrics.strip().splitlines()[:3]) or "(no lyrics)"
         f.write(f"| {station} | `{model}` | {verdict} | `{cand.file}` | {first_lines} |\n")
     assert cand.vocals_ok, f"{name}: vocals requested but Lyria returned {lyrics.strip()[:80]!r}"
+
+
+# Artist style: the real text model turns a reference into traits, the name never reaches Lyria,
+# and Lyria accepts the prompt (no safety block). About $0.08 per run (2 clips + 2 tiny text calls).
+ARTIST_CASES = [("Bob Dylan", "rainy-morning-indie"), ("Daft Punk", "sunset-synthpop")]
+
+
+@pytest.mark.parametrize("reference,station", ARTIST_CASES, ids=[r for r, _ in ARTIST_CASES])
+def test_artist_style_is_described_not_named(reference, station, tmp_path):
+    from aimuse.inspiration import GeminiStyleTranslator, mentions_reference
+    from aimuse.prompt import compile_prompt
+
+    out = Path(os.environ.get("AIMUSE_ARTIST_DIR") or tmp_path) / "artist"
+    out.mkdir(parents=True, exist_ok=True)
+    key = os.environ["GEMINI_API_KEY"]
+    traits = GeminiStyleTranslator(key).translate(reference)
+    assert not traits.is_empty()
+    assert not mentions_reference(traits.model_dump_json(), reference)
+
+    style = load_style(station)
+    intent = style.example_intents[0].model_copy(update={"duration_s": 30, "influences": traits})
+    assert not mentions_reference(compile_prompt(style, intent).text, reference)
+    engine = LyriaEngine(key, model="lyria-3-clip-preview")
+    name = re.sub(r"\W+", "-", reference.lower())
+    track = generate_track(
+        engine,
+        style,
+        intent,
+        name=name,
+        arm="artist",
+        out_dir=out,
+        budget=Budget(engine.price_per_request_usd),
+    )
+    write_recipe(track, style, out)
+    cand = track.candidates[0]
+    with (out / "artist-summary.md").open("a") as f:
+        verdict = "✅" if cand.error is None else f"❌ {cand.error}"
+        f.write(
+            f"| {reference} | {station} | {traits.summary()} | "
+            f"{traits.vocal_delivery or '–'} | {verdict} | `{cand.file}` |\n"
+        )
+    assert cand.error is None, cand.error

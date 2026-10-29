@@ -89,6 +89,29 @@ class StyleBible(BaseModel):
         return self
 
 
+class StyleTraits(BaseModel):
+    """Musical traits of an artist/style the listener likes. Never contains names."""
+
+    genres: list[str] = Field(default_factory=list)
+    era: str | None = None
+    instrumentation: list[str] = Field(default_factory=list)
+    production: str | None = None
+    vocal_delivery: str | None = None
+    lyric_style: str | None = None
+
+    def summary(self) -> str:
+        """One line for people (shown in the app next to the song)."""
+        parts = [", ".join(self.genres)]
+        if self.era:
+            parts.append(self.era)
+        if self.instrumentation:
+            parts.append(", ".join(self.instrumentation[:4]))
+        return " · ".join(p for p in parts if p)
+
+    def is_empty(self) -> bool:
+        return not self.genres and not self.instrumentation
+
+
 class Intent(BaseModel):
     """What the listener wants from one track, on top of the style bible."""
 
@@ -101,6 +124,7 @@ class Intent(BaseModel):
     key: str | None = None
     vocals: Vocals | None = None
     duration_s: int | None = Field(default=None, ge=10, le=240)
+    influences: StyleTraits | None = None
 
     @field_validator("key")
     @classmethod

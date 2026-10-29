@@ -53,6 +53,16 @@ class FirestoreJobStore:
         )
         batch.commit()
 
+    def get_influence(self, key: str) -> dict | None:
+        snap = self.db.collection("influences").document(key).get()
+        return (snap.to_dict() or {}).get("traits") if snap.exists else None
+
+    def save_influence(self, key: str, reference: str, traits: dict) -> None:
+        # Server-only cache (no client rules allow it); shared so each artist is described once.
+        self.db.collection("influences").document(key).set(
+            {"reference": reference, "traits": traits, "createdAt": firestore.SERVER_TIMESTAMP}
+        )
+
     def fail_job(self, uid: str, job_id: str, message: str) -> None:
         self._job(uid, job_id).update(
             {"status": "failed", "error": message[:500], "updatedAt": firestore.SERVER_TIMESTAMP}

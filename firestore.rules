@@ -10,7 +10,8 @@ service cloud.firestore {
     }
 
     function validJob(d) {
-      return d.keys().hasOnly(['stationId', 'mood', 'theme', 'energy', 'vocals', 'status', 'createdAt'])
+      return d.keys().hasOnly(['stationId', 'mood', 'theme', 'energy', 'vocals', 'inspiration',
+                               'status', 'createdAt'])
         && d.status == 'queued'
         && d.createdAt == request.time
         && d.stationId is string && d.stationId.size() > 0 && d.stationId.size() <= 64
@@ -18,7 +19,9 @@ service cloud.firestore {
         && (!('theme' in d) || d.theme == null || (d.theme is string && d.theme.size() <= 200))
         && (!('energy' in d) || d.energy == null
             || (d.energy is number && d.energy >= 0 && d.energy <= 1))
-        && (!('vocals' in d) || d.vocals == null || d.vocals is bool);
+        && (!('vocals' in d) || d.vocals == null || d.vocals is bool)
+        && (!('inspiration' in d) || d.inspiration == null
+            || (d.inspiration is string && d.inspiration.size() <= 80));
     }
 
     match /users/{uid} {

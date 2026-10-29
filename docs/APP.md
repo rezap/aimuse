@@ -22,6 +22,13 @@
 - **Invite-only**: only signed-in users whose verified Google email is in
   `AIMUSE_ALLOWED_EMAILS` (in `functions/.env`) can make songs. Everyone else gets a polite
   "invite-only" message, and nothing is spent. `*` lets anyone in.
+- **Artist style ("In the spirit of…")**: the listener can name an artist or band. A Gemini
+  text model (`AIMUSE_STYLE_MODEL`, default `gemini-3.8-flash`) turns it into musical traits
+  only: genre, era, instruments, production, vocal delivery and lyric style. Any word of the
+  name that leaks into the traits is removed, so only the traits reach Lyria and the song is
+  original. Traits are cached per artist in the server-only `influences` collection, so the
+  same artist always gives the same description. If translation fails, the song is still
+  made, with a note.
 - **Cost control**: the function reserves the request's price against a per-user daily cap
   (`AIMUSE_DAILY_USD`, default $1.00 = 12 full songs) *before* calling Lyria. Duplicate
   trigger deliveries are ignored, because a job is claimed only once.

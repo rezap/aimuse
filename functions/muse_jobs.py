@@ -8,6 +8,7 @@ song -> audio goes to Storage, a track doc is written, the job becomes "done" (o
 
 from __future__ import annotations
 
+import re
 import tempfile
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -17,7 +18,8 @@ from typing import Protocol
 from pydantic import BaseModel, Field, ValidationError
 
 from aimuse.engines import EngineError, MusicEngine
-from aimuse.models import Intent, Vocals
+from aimuse.inspiration import MAX_REFERENCE_CHARS, InspirationError
+from aimuse.models import Intent, StyleTraits, Vocals
 from aimuse.pipeline import Budget, generate_track, rank
 from aimuse.presets import load_style
 
@@ -32,15 +34,25 @@ class JobRequest(BaseModel):
     theme: str | None = Field(default=None, max_length=MAX_THEME_CHARS)
     energy: float | None = Field(default=None, ge=0.0, le=1.0)
     vocals: bool | None = None
+    inspiration: str | None = Field(default=None, max_length=MAX_REFERENCE_CHARS)
 
-    def to_intent(self) -> Intent:
+    def to_intent(self, influences: StyleTraits | None = None) -> Intent:
         vocals = None
         if self.vocals is not None:
             vocals = Vocals.VOCALS if self.vocals else Vocals.INSTRUMENTAL
         theme = self.theme.strip() if self.theme and self.theme.strip() else None
         return Intent(
-            label=theme or self.mood, mood=self.mood, theme=theme, energy=self.energy, vocals=vocals
+            label=theme or self.mood,
+            mood=self.mood,
+            theme=theme,
+            energy=self.energy,
+            vocals=vocals,
+            influences=influences,
         )
+
+
+class StyleTranslator(Protocol):
+    def translate(self, reference: str) -> StyleTraits: ...
 
 
 class JobStore(Protocol):
@@ -54,6 +66,11 @@ class JobStore(Protocol):
         """Write the track doc (id = job id) and mark the job done."""
 
     def fail_job(self, uid: str, job_id: str, message: str) -> None: ...
+
+    def get_influence(self, key: str) -> dict | None:
+        """Cached traits for an artist reference (shared across users), or None."""
+
+    def save_influence(self, key: str, reference: str, traits: dict) -> None: ...
 
 
 class AudioStore(Protocol):
@@ -75,6 +92,27 @@ def display_bpm(measured: float | None, target: int) -> float | None:
     return round(min((measured * f for f in (0.5, 1.0, 2.0)), key=lambda b: abs(b - target)), 1)
 
 
+def influence_key(reference: str) -> str:
+    """Cache key for a reference: "Bob  DYLAN" and "bob dylan" share traits."""
+    return re.sub(r"[^a-z0-9]+", "-", reference.lower()).strip("-")[:80]
+
+
+def resolve_influences(
+    reference: str, store: JobStore, translator_factory: Callable[[], StyleTranslator]
+) -> StyleTraits:
+    """Traits for a reference, translated once and then reused, so every song "like X" gets
+    the same description (consistency) and the text model is called only once per artist."""
+    key = influence_key(reference)
+    if not key:
+        raise InspirationError("empty reference")
+    cached = store.get_influence(key)
+    if cached:
+        return StyleTraits.model_validate(cached)
+    traits = translator_factory().translate(reference)
+    store.save_influence(key, reference.strip(), traits.model_dump())
+    return traits
+
+
 def _title(req: JobRequest, station_name: str) -> str:
     if req.theme and req.theme.strip():
         t = req.theme.strip()
@@ -93,6 +131,7 @@ def process_job(
     engine_factory: Callable[[], MusicEngine],
     daily_cap_usd: float,
     is_allowed: Callable[[str], bool] = lambda uid: True,
+    translator_factory: Callable[[], StyleTranslator] | None = None,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> str:
     """Run one job. Returns the final status: "done", "failed" or "skipped"."""
@@ -111,6 +150,17 @@ def process_job(
         except FileNotFoundError as e:
             raise JobFailed(f"Unknown station {req.station_id!r}") from e
 
+        influences, inspiration_note = None, None
+        reference = (req.inspiration or "").strip()
+        if reference:
+            try:
+                if translator_factory is None:
+                    raise InspirationError("artist styles are not enabled")
+                influences = resolve_influences(reference, store, translator_factory)
+            except InspirationError as e:
+                # Not worth failing the song over: make it without the artist influence.
+                inspiration_note = f"Made without the artist style ({e})."
+
         engine = engine_factory()
         price = engine.price_per_request_usd
         if not store.reserve_spend(uid, now().strftime("%Y-%m-%d"), price, daily_cap_usd):
@@ -122,7 +172,7 @@ def process_job(
                 track = generate_track(
                     engine,
                     style,
-                    req.to_intent(),
+                    req.to_intent(influences),
                     name=job_id,
                     arm="app",
                     out_dir=out,
@@ -153,6 +203,9 @@ def process_job(
                 "mood": req.mood,
                 "theme": req.theme,
                 "energy": req.energy,
+                "inspiration": reference or None,
+                "influences": influences.summary() if influences else None,
+                "inspirationNote": inspiration_note,
                 "vocals": track.target.vocals == Vocals.VOCALS,
                 # False when vocals were asked for but the engine made an instrumental.
                 "vocalsDelivered": cand.vocals_ok,

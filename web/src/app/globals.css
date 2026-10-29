@@ -94,3 +94,5 @@ summary { cursor: pointer; color: var(--muted); }
 .lyrics p { margin: 0 0 14px; }
 .lyric-line { display: block; }
 .lyric-heading { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.hint { font-size: 0.8rem; margin: 6px 0 0; }
+.influence { font-size: 0.8rem; margin: 0 0 6px; }
