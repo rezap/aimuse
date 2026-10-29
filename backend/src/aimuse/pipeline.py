@@ -21,8 +21,8 @@ from .analysis import (
     typicality,
 )
 from .engines.base import EngineError, MusicEngine
-from .models import Intent, StyleBible, TargetSpec
-from .prompt import compile_prompt
+from .models import Intent, StyleBible, TargetSpec, Vocals
+from .prompt import compile_prompt, returned_instrumental
 
 _EXT = {"audio/mp3": "mp3", "audio/mpeg": "mp3", "audio/wav": "wav", "audio/x-wav": "wav"}
 
@@ -56,6 +56,7 @@ class Candidate(BaseModel):
     analysis: TrackAnalysis | None = None
     qa: QAResult | None = None
     typicality: float | None = None
+    vocals_ok: bool | None = None  # None when no vocals were requested
     score: float | None = None
     error: str | None = None
 
@@ -123,6 +124,8 @@ def generate_track(
         audio_path = track_dir / f"{name}_c{k}.{ext}"
         audio_path.write_bytes(asset.data)
         cand.file = str(audio_path.relative_to(out_dir))
+        if prompt.target.vocals == Vocals.VOCALS:
+            cand.vocals_ok = not returned_instrumental(asset.lyrics)
         if asset.lyrics:
             lyr = track_dir / f"{name}_c{k}.lyrics.txt"
             lyr.write_text(asset.lyrics)
@@ -131,6 +134,8 @@ def generate_track(
             y, sr = decode(asset.data)
             cand.analysis = analyze(y, sr)
             cand.qa = check(cand.analysis, prompt.target)
+            if cand.vocals_ok is False:
+                cand.qa.issues.append("vocals requested but the engine returned an instrumental")
         except Exception as e:  # noqa: BLE001 - a bad file must not stop the batch
             cand.error = f"analysis failed: {e}"
     return result
@@ -151,6 +156,7 @@ def rank(tracks: list[TrackResult]) -> None:
                 (1.0 if c.qa.passed else 0.0)
                 + (0.5 if c.qa.bpm_ok else 0.0)
                 + (0.5 if c.qa.key_ok else 0.0)
+                + (1.0 if c.vocals_ok else 0.0)
                 + c.typicality,
                 4,
             )

@@ -20,6 +20,31 @@ def _energy_words(energy: float) -> str:
     return "high-energy, powerful"
 
 
+# Used when vocals are requested but the station's structure has no sung sections
+# (instrumental stations use "Main groove" / "Variation" etc.).
+_SONG_STRUCTURE = [
+    Section(name="Intro", seconds=8),
+    Section(name="Verse 1", seconds=24),
+    Section(name="Chorus", seconds=20),
+    Section(name="Verse 2", seconds=24),
+    Section(name="Chorus", seconds=20),
+    Section(name="Outro", seconds=10),
+]
+_SUNG_SECTIONS = ("verse", "chorus", "hook", "bridge")
+
+
+def _mentions_vocals(text: str) -> bool:
+    t = text.lower()
+    return "vocal" in t or "voice" in t or "singing" in t
+
+
+def returned_instrumental(lyrics: str | None) -> bool:
+    """Lyria answers with "<instrumental>" (or no lyrics) when it made no vocals."""
+    if not lyrics or not lyrics.strip():
+        return True
+    return lyrics.strip().strip("<>[]() ").lower() in ("instrumental", "instrumental only")
+
+
 def _timestamp(seconds: int) -> str:
     return f"{seconds // 60}:{seconds % 60:02d}"
 
@@ -55,8 +80,13 @@ def compile_prompt(
     target = compile_target(style, intent)
     moods = [intent.mood] if intent.mood else style.moods
 
+    sung = target.vocals == Vocals.VOCALS
+
     lines = [style.description.strip()]
     lines.append(f"Genre: {', '.join(style.genres)}.")
+    if sung:
+        # Say it early and plainly: station descriptions can read as instrumental.
+        lines.append("This is a song with a lead singer and sung lyrics, not an instrumental.")
     if moods:
         lines.append(f"Mood: {', '.join(moods)}.")
     if intent.energy is not None:
@@ -69,23 +99,32 @@ def compile_prompt(
     if style.production:
         lines.append(f"Production: {style.production}.")
 
-    if target.vocals == Vocals.INSTRUMENTAL:
-        lines.append("Instrumental only, no vocals.")
-    else:
+    if sung:
         theme = intent.theme or (style.lyric_themes[0] if style.lyric_themes else None)
-        voice = style.vocal_style or "expressive lead vocals"
-        about = f" about {theme}" if theme else ""
-        lines.append(f"Vocals: {voice}, singing original {style.lyric_language} lyrics{about}.")
+        voice = style.vocal_style or "warm, expressive lead vocal with light backing harmonies"
+        lines.append(f"Vocals: {voice}.")
+        about = f" and describe {theme}" if theme else ""
+        lines.append(f"The lyrics are original, in {style.lyric_language}{about}.")
+    else:
+        lines.append("Instrumental only, no vocals.")
 
     if intent.text:
         lines.append(intent.text.strip())
-    if style.avoid:
-        lines.append(f"Avoid: {', '.join(style.avoid)}.")
+    # The listener's vocals choice wins over the station's "avoid" list (e.g. "Avoid: vocals" on
+    # an instrumental station when they asked for vocals).
+    avoid = [a for a in style.avoid if not _mentions_vocals(a)]
+    if not sung:
+        avoid.append("vocals")
+    if avoid:
+        lines.append(f"Avoid: {', '.join(avoid)}.")
     lines.append(f"Length: about {target.duration_s} seconds.")
 
-    if style.structure:
+    structure = style.structure
+    if sung and not any(s.name.lower().startswith(_SUNG_SECTIONS) for s in structure):
+        structure = _SONG_STRUCTURE
+    if structure:
         lines.append("Structure:")
-        for name, start, end in _scaled_structure(style.structure, target.duration_s):
+        for name, start, end in _scaled_structure(structure, target.duration_s):
             lines.append(f"[{_timestamp(start)} - {_timestamp(end)}] {name}")
 
     images = []

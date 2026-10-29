@@ -88,3 +88,47 @@ def test_lyria_clip_through_app_pipeline(tmp_path):
     assert a.sample_rate == 44100 and a.channels == 2
     assert 20 <= a.duration_s <= 40  # Clip is documented as always 30 s
     assert a.silence_ratio < 0.5 and a.clipping_ratio <= 0.001
+
+
+# Vocal check: ask for vocals on every station, including the instrumental lo-fi station with the
+# app's own model, and fail if Lyria answers "<instrumental>". About $0.20 per run.
+VOCAL_CASES = [
+    ("rainy-morning-indie", "lyria-3-clip-preview"),
+    ("sunset-synthpop", "lyria-3-clip-preview"),
+    ("late-night-lofi", "lyria-3-clip-preview"),
+    ("late-night-lofi", "lyria-3.5"),
+]
+
+
+@pytest.mark.parametrize("station,model", VOCAL_CASES, ids=[f"{s}-{m}" for s, m in VOCAL_CASES])
+def test_vocals_requested_are_sung(station, model, tmp_path):
+    from aimuse.models import Vocals
+
+    out = Path(os.environ.get("AIMUSE_ARTIFACT_DIR") or tmp_path) / "vocals"
+    out.mkdir(parents=True, exist_ok=True)
+    style = load_style(station)
+    intent = style.example_intents[0].model_copy(update={"vocals": Vocals.VOCALS})
+    if model == "lyria-3-clip-preview":
+        intent = intent.model_copy(update={"duration_s": 30})
+    engine = LyriaEngine(os.environ["GEMINI_API_KEY"], model=model)
+
+    name = f"{station}-{model}"
+    track = generate_track(
+        engine,
+        style,
+        intent,
+        name=name,
+        arm="vocals",
+        out_dir=out,
+        budget=Budget(engine.price_per_request_usd),
+    )
+    rank([track])
+    write_recipe(track, style, out)
+    cand = track.candidates[0]
+    assert cand.error is None, cand.error
+    lyrics = (out / cand.lyrics_file).read_text() if cand.lyrics_file else ""
+    with (out / "vocals-summary.md").open("a") as f:
+        verdict = "✅ sung" if cand.vocals_ok else "❌ came out instrumental"
+        first_lines = " / ".join(lyrics.strip().splitlines()[:3]) or "(no lyrics)"
+        f.write(f"| {station} | `{model}` | {verdict} | `{cand.file}` | {first_lines} |\n")
+    assert cand.vocals_ok, f"{name}: vocals requested but Lyria returned {lyrics.strip()[:80]!r}"

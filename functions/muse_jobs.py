@@ -154,6 +154,8 @@ def process_job(
                 "theme": req.theme,
                 "energy": req.energy,
                 "vocals": track.target.vocals == Vocals.VOCALS,
+                # False when vocals were asked for but the engine made an instrumental.
+                "vocalsDelivered": cand.vocals_ok,
                 "audioPath": path,
                 "mimeType": mime,
                 "durationS": a.duration_s if a else None,
