@@ -3,3 +3,4 @@ aimuse/
 .secret.local
 __pycache__/
 .env.local
+.env

@@ -92,6 +92,7 @@ def process_job(
     audio: AudioStore,
     engine_factory: Callable[[], MusicEngine],
     daily_cap_usd: float,
+    is_allowed: Callable[[str], bool] = lambda uid: True,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> str:
     """Run one job. Returns the final status: "done", "failed" or "skipped"."""
@@ -99,6 +100,8 @@ def process_job(
     if job is None:
         return "skipped"
     try:
+        if not is_allowed(uid):
+            raise JobFailed("This app is invite-only. Ask the owner to add your email address.")
         try:
             req = JobRequest.model_validate(job)
         except ValidationError as e:
