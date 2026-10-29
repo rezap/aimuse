@@ -73,7 +73,8 @@ class FakeEngine:
         return AudioAsset(
             data=buf.getvalue(),
             mime_type="audio/wav",
-            lyrics="[Verse]\n(fake engine: no lyrics)",
+            # Same markup as Lyria Clip, so the app's lyrics formatting is exercised offline.
+            lyrics="[0.0:4.0] Fake engine sings softly\n[4.0:8.0] (la la la)",
             engine=self.id,
             model=self.model,
             cost_usd=self._cost,
