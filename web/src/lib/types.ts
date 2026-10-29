@@ -33,6 +33,7 @@ export type Track = {
   mood: string | null;
   theme: string | null;
   vocals: boolean;
+  vocalsDelivered?: boolean | null;
   audioPath: string;
   mimeType: string;
   durationS: number | null;

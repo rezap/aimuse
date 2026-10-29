@@ -86,3 +86,31 @@ def test_cli_lyria_requires_key(tmp_path, monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     with pytest.raises(ValueError, match="GEMINI_API_KEY"):
         main(["spike", "--engine", "lyria", "--tracks", "1", "--out", str(tmp_path)])
+
+
+def test_missing_vocals_are_flagged_and_ranked_lower(tmp_path, style):
+    from aimuse.models import Intent
+    from aimuse.pipeline import Budget, generate_track, rank
+
+    class SometimesInstrumental(FakeEngine):
+        def generate(self, prompt):
+            asset = super().generate(prompt)
+            if self.calls == 1:
+                asset.lyrics = "<instrumental>"
+            return asset
+
+    track = generate_track(
+        SometimesInstrumental(max_seconds=10),
+        style,
+        Intent(theme="x"),
+        name="t",
+        arm="a",
+        out_dir=tmp_path,
+        budget=Budget(1.0),
+        candidates=2,
+    )
+    rank([track])
+    first, second = track.candidates
+    assert first.vocals_ok is False and second.vocals_ok is True
+    assert any("instrumental" in i for i in first.qa.issues)
+    assert track.chosen == 1

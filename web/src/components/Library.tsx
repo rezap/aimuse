@@ -64,6 +64,7 @@ function TrackCard({ uid, track }: { uid: string; track: Track }) {
             {track.stationName} · {formatDuration(track.durationS)}
             {track.bpm ? ` · ${Math.round(track.bpm)} BPM` : ""}
             {track.vocals ? "" : " · instrumental"}
+            {track.vocals && track.vocalsDelivered === false ? " · came out instrumental" : ""}
           </span>
         </div>
         {url ? <audio controls preload="none" src={url} /> : <p className="muted">Loading audio…</p>}

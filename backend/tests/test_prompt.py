@@ -3,7 +3,8 @@ import io
 from PIL import Image
 
 from aimuse.models import Intent, Vocals
-from aimuse.prompt import _scaled_structure, compile_prompt
+from aimuse.presets import load_style
+from aimuse.prompt import _scaled_structure, compile_prompt, returned_instrumental
 
 
 def test_prompt_is_deterministic_and_complete(style):
@@ -12,7 +13,8 @@ def test_prompt_is_deterministic_and_complete(style):
     assert a.text == b.text
     assert "Tempo: 100 BPM." in a.text
     assert "Key: A minor." in a.text
-    assert "lyrics about rain" in a.text
+    assert "sung lyrics, not an instrumental" in a.text
+    assert "describe rain" in a.text
     assert "very calm" in a.text
     assert "[0:00 - 0:03] Intro" in a.text and "[0:03 - 0:10] Verse" in a.text
     assert a.images == []
@@ -41,3 +43,28 @@ def test_structure_scales_to_duration(style):
     parts = _scaled_structure(style.structure, 95)
     assert parts[0][1] == 0 and parts[-1][2] == 95
     assert all(a[2] == b[1] for a, b in zip(parts, parts[1:], strict=False))
+
+
+def test_vocals_on_instrumental_station_override_its_avoid_list_and_structure():
+    lofi = load_style("late-night-lofi")
+    assert "vocals" in lofi.avoid  # the station itself is instrumental
+    p = compile_prompt(lofi, Intent(vocals=Vocals.VOCALS, theme="night buses"))
+    avoid_line = next(line for line in p.text.splitlines() if line.startswith("Avoid:"))
+    assert "vocal" not in avoid_line
+    assert "Instrumental only" not in p.text
+    assert "sung lyrics, not an instrumental" in p.text and "describe night buses" in p.text
+    assert "] Verse 1" in p.text and "] Chorus" in p.text  # sung sections, not "Main groove"
+
+
+def test_instrumental_on_vocal_station_avoids_vocals():
+    p = compile_prompt(load_style("rainy-morning-indie"), Intent(vocals=Vocals.INSTRUMENTAL))
+    assert "Instrumental only, no vocals." in p.text
+    avoid_line = next(line for line in p.text.splitlines() if line.startswith("Avoid:"))
+    assert avoid_line.endswith("vocals.") and "aggressive vocals" not in avoid_line
+    assert "Vocals:" not in p.text
+
+
+def test_returned_instrumental():
+    assert returned_instrumental("<instrumental>") and returned_instrumental("  ")
+    assert returned_instrumental(None) and returned_instrumental("[Instrumental]")
+    assert not returned_instrumental("[Verse 1]\nRain on the glass")
