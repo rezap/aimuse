@@ -29,6 +29,11 @@
   original. Traits are cached per artist in the server-only `influences` collection, so the
   same artist always gives the same description. If translation fails, the song is still
   made, with a note.
+- **Own lyrics**: "✍️ Use my own lyrics" (or pasting multi-line text into the topic field)
+  sends up to 3000 characters. They go to Lyria under a `Lyrics:` header with `[Verse n]`
+  tags (the listener's own tags are kept), always sung, and the song length follows the
+  text. Lyria refuses well-known songs and famous poems; the app explains that refusal
+  instead of showing a raw API error.
 - **Cost control**: the function reserves the request's price against a per-user daily cap
   (`AIMUSE_DAILY_USD`, default $1.00 = 12 full songs) *before* calling Lyria. Duplicate
   trigger deliveries are ignored, because a job is claimed only once.

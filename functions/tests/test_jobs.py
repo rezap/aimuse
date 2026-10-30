@@ -4,7 +4,7 @@ import pytest
 import soundfile as sf
 
 from aimuse.engines import EngineError, FakeEngine
-from muse_jobs import JobRequest, display_bpm, process_job
+from muse_jobs import JobRequest, display_bpm, friendly_engine_error, process_job
 
 
 class MemoryStore:
@@ -195,3 +195,35 @@ def test_inspiration_too_long_is_rejected():
     store = MemoryStore({"j1": _job(inspiration="x" * 81)})
     assert _run(store, MemoryAudio()) == "failed"
     assert store.jobs["j1"]["error"].startswith("Invalid request")
+
+
+def test_own_lyrics_job():
+    lyrics = "If you can keep your head when all about you\n    Are losing theirs\n"
+    store = MemoryStore({"j1": _job(lyrics=lyrics, vocals=False)})
+    assert _run(store, MemoryAudio()) == "done"
+    t = store.tracks["j1"]
+    assert t["ownLyrics"] is True and t["vocals"] is True  # lyrics are always sung
+    assert t["title"] == "If you can keep your head when all about you"
+    assert "Lyrics:\n[Verse 1]\nIf you can keep your head" in t["prompt"]
+
+
+def test_lyrics_too_long_rejected():
+    store = MemoryStore({"j1": _job(lyrics="la " * 1001)})
+    assert _run(store, MemoryAudio()) == "failed"
+    assert store.jobs["j1"]["error"].startswith("Invalid request")
+
+
+def test_refusals_are_explained():
+    msg = friendly_engine_error(
+        "Lyria API error 400: Request blocked by safety filters (recitation)"
+    )
+    assert msg.startswith("Lyria declined to make this song") and "recitation" in msg
+    assert friendly_engine_error("Lyria API error 500: boom") == "Lyria API error 500: boom"
+
+    class Refusing(FakeEngine):
+        def generate(self, prompt):
+            raise EngineError("Lyria returned no audio: blocked")
+
+    store = MemoryStore({"j1": _job(lyrics="some famous words")})
+    assert _run(store, MemoryAudio(), Refusing(cost_usd=0.08)) == "failed"
+    assert store.jobs["j1"]["error"].startswith("Lyria declined to make this song")

@@ -125,6 +125,7 @@ class Intent(BaseModel):
     vocals: Vocals | None = None
     duration_s: int | None = Field(default=None, ge=10, le=240)
     influences: StyleTraits | None = None
+    lyrics: str | None = Field(default=None, max_length=3000)  # the listener's own words
 
     @field_validator("key")
     @classmethod

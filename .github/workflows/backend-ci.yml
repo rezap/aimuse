@@ -13,9 +13,9 @@ on:
         type: boolean
         default: false
       live_suite:
-        description: "Which live tests: clip (~$0.04), vocals (~$0.20), artist (~$0.08), all (~$0.32)"
+        description: "Which live tests: clip (~$0.04), vocals (~$0.20), artist (~$0.08), lyrics (~$0.08), all (~$0.40)"
         type: choice
-        options: [clip, vocals, artist, all]
+        options: [clip, vocals, artist, lyrics, all]
         default: clip
       live_preset:
         description: Station used by the clip test
@@ -94,6 +94,7 @@ jobs:
           case "$SUITE" in
             vocals) select=(-k test_vocals_requested_are_sung) ;;
             artist) select=(-k test_artist_style_is_described_not_named) ;;
+            lyrics) select=(-k test_own_lyrics) ;;
             all) select=() ;;
             *) select=(-k test_lyria_clip_through_app_pipeline) ;;
           esac
@@ -108,6 +109,12 @@ jobs:
             { echo "## Vocals check"; echo
               echo "| Station | Model | Result | Audio | First lyric lines |"
               echo "|---|---|---|---|---|"; cat "$v"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          l="$GITHUB_WORKSPACE/live-out/lyrics/lyrics-summary.md"
+          if [ -f "$l" ]; then
+            { echo "## Own lyrics check"; echo
+              echo "| Case | Lyria | First sung lines | Audio |"
+              echo "|---|---|---|---|"; cat "$l"; } >> "$GITHUB_STEP_SUMMARY"
           fi
           a="$GITHUB_WORKSPACE/live-out/artist/artist-summary.md"
           if [ -f "$a" ]; then

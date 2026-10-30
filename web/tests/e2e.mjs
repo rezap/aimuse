@@ -39,6 +39,13 @@ try {
   await page.getByRole("button", { name: "👍" }).first().click();
   await page.locator('button[aria-pressed="true"]').first().waitFor({ timeout: 10000 });
   await shot("2-library");
+
+  // Second song from the listener's own lyrics.
+  await page.getByRole("button", { name: /Use my own lyrics/ }).click();
+  await page.locator("#lyrics").fill("Paper boats on a silver stream\nCarry every little dream\n\nLet them sail into the light");
+  await page.getByRole("button", { name: "Make it" }).click();
+  await page.locator("li.track", { hasText: "Paper boats on a silver stream" }).waitFor({ timeout: 180000 });
+  await shot("3-own-lyrics");
   console.log(`E2E OK: ${head.replace(/\n/g, " | ")}`);
 } catch (e) {
   await shot("failure");

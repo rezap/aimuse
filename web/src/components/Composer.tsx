@@ -6,6 +6,8 @@ import { gradient, MOODS, requestSong, stations, surpriseRequest, type SongReque
 
 type Props = { uid: string };
 
+const MAX_LYRICS = 3000;
+
 const ENERGY_LABELS = ["Very calm", "Relaxed", "Steady", "High energy"];
 
 export function Composer({ uid }: Props) {
@@ -14,6 +16,8 @@ export function Composer({ uid }: Props) {
   const [energy, setEnergy] = useState(0.5);
   const [theme, setTheme] = useState("");
   const [inspiration, setInspiration] = useState("");
+  const [lyricsMode, setLyricsMode] = useState(false);
+  const [lyrics, setLyrics] = useState("");
   const [vocals, setVocals] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +30,7 @@ export function Composer({ uid }: Props) {
     try {
       await requestSong(uid, req);
       setTheme("");
+      setLyrics("");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -95,6 +100,16 @@ export function Composer({ uid }: Props) {
           placeholder={station?.ideas[0] ?? "a quiet morning"}
           value={theme}
           onChange={(e) => setTheme(e.target.value)}
+          onPaste={(e) => {
+            // A multi-line or long paste is almost certainly lyrics, not a topic: the one-line
+            // field would silently drop the line breaks and cut it at 200 characters.
+            const text = e.clipboardData.getData("text");
+            if (text.includes("\n") || text.length > 200) {
+              e.preventDefault();
+              setLyrics(text.slice(0, MAX_LYRICS));
+              setLyricsMode(true);
+            }
+          }}
         />
         {station && station.ideas.length > 0 && (
           <div className="chips small">
@@ -104,6 +119,38 @@ export function Composer({ uid }: Props) {
               </button>
             ))}
           </div>
+        )}
+      </div>
+
+      <div className="field">
+        {lyricsMode ? (
+          <>
+            <label htmlFor="lyrics">
+              Your lyrics{" "}
+              <span className="muted">
+                ({lyrics.length}/{MAX_LYRICS})
+              </span>
+            </label>
+            <textarea
+              id="lyrics"
+              rows={10}
+              maxLength={MAX_LYRICS}
+              placeholder={"[Verse]\nWrite your own words here…\n\n[Chorus]\n…"}
+              value={lyrics}
+              onChange={(e) => setLyrics(e.target.value)}
+            />
+            <p className="hint muted">
+              Sung as written; a blank line starts a new verse. Lyria refuses well-known songs
+              and famous poems (even old public-domain ones), so original words work best.
+            </p>
+            <button className="ghost small" onClick={() => setLyricsMode(false)}>
+              Use a topic instead
+            </button>
+          </>
+        ) : (
+          <button className="ghost small" onClick={() => setLyricsMode(true)}>
+            ✍️ Use my own lyrics
+          </button>
         )}
       </div>
 
@@ -125,7 +172,7 @@ export function Composer({ uid }: Props) {
         </p>
       </div>
 
-      <div className="field">
+      <div className="field" hidden={lyricsMode}>
         <label>Vocals</label>
         <div className="chips">
           {[
@@ -147,8 +194,18 @@ export function Composer({ uid }: Props) {
       <div className="actions">
         <button
           className="primary"
-          disabled={busy || !station}
-          onClick={() => submit({ stationId, mood, theme, energy, vocals, inspiration })}
+          disabled={busy || !station || (lyricsMode && !lyrics.trim())}
+          onClick={() =>
+            submit({
+              stationId,
+              mood,
+              theme,
+              energy,
+              vocals: lyricsMode ? true : vocals,
+              inspiration,
+              lyrics: lyricsMode ? lyrics : null,
+            })
+          }
         >
           {busy ? "Sending…" : "Make it"}
         </button>

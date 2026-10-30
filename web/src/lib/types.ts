@@ -37,6 +37,7 @@ export type Track = {
   inspiration?: string | null;
   influences?: string | null;
   inspirationNote?: string | null;
+  ownLyrics?: boolean;
   audioPath: string;
   mimeType: string;
   durationS: number | null;

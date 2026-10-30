@@ -60,6 +60,8 @@ test("job requests are validated", async () => {
   await assertSucceeds(addDoc(jobs, job({ inspiration: "Bob Dylan" })));
   await assertFails(addDoc(jobs, job({ inspiration: "x".repeat(81) })));
   await assertFails(addDoc(jobs, job({ inspiration: 42 })));
+  await assertSucceeds(addDoc(jobs, job({ lyrics: "line one\nline two" })));
+  await assertFails(addDoc(jobs, job({ lyrics: "x".repeat(3001) })));
 });
 
 test("nobody can queue jobs for someone else or edit jobs", async () => {

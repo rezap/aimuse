@@ -23,9 +23,6 @@ from firebase_admin import auth, firestore, initialize_app, storage
 from firebase_functions import firestore_fn, options
 from firebase_functions.params import SecretParam
 
-from firebase_stores import FirestoreJobStore, StorageAudioStore
-from muse_jobs import process_job
-
 GEMINI_API_KEY = SecretParam("GEMINI_API_KEY")
 
 initialize_app()
@@ -95,6 +92,11 @@ def _engine():
     max_instances=10,
 )
 def on_job_created(event: firestore_fn.Event) -> None:
+    # Imported here, not at module level: the audio stack (scipy via pyloudnorm, librosa) takes
+    # ~10 s to import cold, and Firebase gives function discovery only 10 s at deploy time.
+    from firebase_stores import FirestoreJobStore, StorageAudioStore
+    from muse_jobs import process_job
+
     db, bucket = _clients()
     process_job(
         event.params["uid"],
