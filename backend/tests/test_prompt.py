@@ -68,3 +68,38 @@ def test_returned_instrumental():
     assert returned_instrumental("<instrumental>") and returned_instrumental("  ")
     assert returned_instrumental(None) and returned_instrumental("[Instrumental]")
     assert not returned_instrumental("[Verse 1]\nRain on the glass")
+
+
+KIPLING = """If you can keep your head when all about you
+    Are losing theirs and blaming it on you,
+If you can trust yourself when all men doubt you,
+    But make allowance for their doubting too;
+
+If you can dream—and not make dreams your master;
+    If you can think—and not make thoughts your aim;
+"""
+
+
+def test_own_lyrics_are_sent_verbatim_with_verse_tags():
+    from aimuse.prompt import format_user_lyrics
+
+    formatted, sung = format_user_lyrics(KIPLING)
+    assert sung == 6
+    assert formatted.startswith("[Verse 1]\nIf you can keep your head when all about you\n")
+    assert "\n\n[Verse 2]\nIf you can dream—and not make dreams your master;" in formatted
+
+    p = compile_prompt(load_style("late-night-lofi"), Intent(lyrics=KIPLING))
+    assert p.target.vocals == Vocals.VOCALS  # own lyrics are always sung
+    assert p.target.duration_s == 60  # short text -> short song (min 60 s)
+    assert p.text.endswith(formatted)
+    assert "\nLyrics:\n[Verse 1]" in p.text
+    assert "exactly as written" in p.text and "lyrics are original" not in p.text
+    assert "Structure:" not in p.text  # the lyrics define the sections
+
+
+def test_own_lyrics_keep_existing_tags_and_scale_length():
+    from aimuse.prompt import duration_for_lyrics, format_user_lyrics
+
+    formatted, sung = format_user_lyrics("[Chorus]\nla la\n\n[Verse]\nhey\r\nho")
+    assert formatted == "[Chorus]\nla la\n\n[Verse]\nhey\nho" and sung == 3
+    assert duration_for_lyrics(32) == 180 and duration_for_lyrics(15) == 110

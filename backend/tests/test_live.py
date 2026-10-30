@@ -175,3 +175,55 @@ def test_artist_style_is_described_not_named(reference, station, tmp_path):
             f"{traits.vocal_delivery or '–'} | {verdict} | `{cand.file}` |\n"
         )
     assert cand.error is None, cand.error
+
+
+# Own lyrics: does Lyria sing the listener's words? The original text must work. The famous poem
+# ("If—", Kipling 1910, public domain) is recorded either way: it shows whether Lyria's
+# recitation filter refuses well-known texts. About $0.08 per run (2 clips).
+KIPLING_IF = """If you can keep your head when all about you
+    Are losing theirs and blaming it on you,
+If you can trust yourself when all men doubt you,
+    But make allowance for their doubting too;
+
+If you can dream—and not make dreams your master;
+    If you can think—and not make thoughts your aim;
+If you can meet with Triumph and Disaster
+    And treat those two impostors just the same;"""
+ORIGINAL_LYRICS = """Paper boats on a silver stream
+Carry every little dream
+Down the hill and past the mill
+Where the morning air is still
+
+[Chorus]
+Let them sail, let them sail
+Into the light beyond the rail"""
+LYRICS_CASES = [("original", ORIGINAL_LYRICS, True), ("kipling-if", KIPLING_IF, False)]
+
+
+@pytest.mark.parametrize("case,text,must_work", LYRICS_CASES, ids=[c for c, _, _ in LYRICS_CASES])
+def test_own_lyrics(case, text, must_work, tmp_path):
+    from aimuse.models import Intent
+
+    out = Path(os.environ.get("AIMUSE_ARTIFACT_DIR") or tmp_path) / "lyrics"
+    out.mkdir(parents=True, exist_ok=True)
+    style = load_style("rainy-morning-indie")
+    engine = LyriaEngine(os.environ["GEMINI_API_KEY"], model="lyria-3-clip-preview")
+    track = generate_track(
+        engine,
+        style,
+        Intent(lyrics=text, duration_s=30),
+        name=case,
+        arm="lyrics",
+        out_dir=out,
+        budget=Budget(engine.price_per_request_usd),
+    )
+    write_recipe(track, style, out)
+    cand = track.candidates[0]
+    sung = (out / cand.lyrics_file).read_text() if cand.lyrics_file else ""
+    first = " / ".join(sung.strip().splitlines()[:2]) or "(none)"
+    with (out / "lyrics-summary.md").open("a") as f:
+        verdict = "✅ made" if cand.error is None else f"❌ {cand.error[:160]}"
+        f.write(f"| {case} | {verdict} | {first} | `{cand.file}` |\n")
+    if must_work:
+        assert cand.error is None, cand.error
+        assert cand.vocals_ok

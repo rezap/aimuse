@@ -6,6 +6,8 @@ one of the main levers for consistency across a station. Only the intent delta c
 
 from __future__ import annotations
 
+import re
+
 from .anchor import anchor_image_png
 from .models import EnginePrompt, ImageInput, Intent, Section, StyleBible, TargetSpec, Vocals
 
@@ -45,6 +47,39 @@ def returned_instrumental(lyrics: str | None) -> bool:
     return lyrics.strip().strip("<>[]() ").lower() in ("instrumental", "instrumental only")
 
 
+_TAG = re.compile(r"^\[[^\]]+\]$")
+
+
+def format_user_lyrics(text: str) -> tuple[str, int]:
+    """Tidy the listener's lyrics for Lyria; returns (lyrics, number of sung lines).
+
+    Lyria's guide wants lyrics under a "Lyrics:" header with section tags. If the listener
+    wrote no tags, each stanza (blank-line separated) becomes [Verse 1], [Verse 2], ...
+    """
+    lines = [ln.strip() for ln in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    stanzas: list[list[str]] = [[]]
+    for ln in lines:
+        if ln:
+            stanzas[-1].append(ln)
+        elif stanzas[-1]:
+            stanzas.append([])
+    stanzas = [s for s in stanzas if s]
+    has_tags = any(_TAG.match(ln) for s in stanzas for ln in s)
+    out = []
+    for i, stanza in enumerate(stanzas, 1):
+        if not has_tags:
+            out.append(f"[Verse {i}]")
+        out.extend(stanza)
+        out.append("")
+    sung = sum(1 for s in stanzas for ln in s if not _TAG.match(ln))
+    return "\n".join(out).strip(), sung
+
+
+def duration_for_lyrics(sung_lines: int) -> int:
+    """Roughly 6 s per sung line plus intro/outro, within what Lyria 3.5 makes (~3 min)."""
+    return max(60, min(180, 20 + 6 * sung_lines))
+
+
 def _timestamp(seconds: int) -> str:
     return f"{seconds // 60}:{seconds % 60:02d}"
 
@@ -66,12 +101,13 @@ def _scaled_structure(sections: list[Section], duration_s: int) -> list[tuple[st
 def compile_target(style: StyleBible, intent: Intent) -> TargetSpec:
     bpm = intent.bpm if intent.bpm is not None else round((style.bpm_min + style.bpm_max) / 2)
     key = intent.key or (style.keys[0] if style.keys else None)
-    return TargetSpec(
-        bpm=bpm,
-        key=key,
-        duration_s=intent.duration_s or style.duration_s,
-        vocals=intent.vocals or style.vocals,
-    )
+    duration = intent.duration_s or style.duration_s
+    vocals = intent.vocals or style.vocals
+    if intent.lyrics and intent.lyrics.strip():
+        vocals = Vocals.VOCALS  # own lyrics are meant to be sung
+        if not intent.duration_s:
+            duration = duration_for_lyrics(format_user_lyrics(intent.lyrics)[1])
+    return TargetSpec(bpm=bpm, key=key, duration_s=duration, vocals=vocals)
 
 
 def compile_prompt(
@@ -82,6 +118,7 @@ def compile_prompt(
 
     sung = target.vocals == Vocals.VOCALS
     inf = intent.influences
+    own_lyrics = format_user_lyrics(intent.lyrics)[0] if intent.lyrics else ""
 
     lines = [style.description.strip()]
     lines.append(f"Genre: {', '.join(style.genres)}.")
@@ -116,8 +153,13 @@ def compile_prompt(
             or "warm, expressive lead vocal with light backing harmonies"
         )
         lines.append(f"Vocals: {voice}.")
-        about = f" and describe {theme}" if theme else ""
-        lines.append(f"The lyrics are original, in {style.lyric_language}{about}.")
+        if own_lyrics:
+            lines.append(
+                "Sing the lyrics below exactly as written, in order. Do not add or change words."
+            )
+        else:
+            about = f" and describe {theme}" if theme else ""
+            lines.append(f"The lyrics are original, in {style.lyric_language}{about}.")
         if inf and inf.lyric_style:
             lines.append(f"Lyric style: {inf.lyric_style}.")
     else:
@@ -139,10 +181,16 @@ def compile_prompt(
     structure = style.structure
     if sung and not any(s.name.lower().startswith(_SUNG_SECTIONS) for s in structure):
         structure = _SONG_STRUCTURE
+    if own_lyrics:
+        structure = []  # the listener's lyrics define the song's sections
     if structure:
         lines.append("Structure:")
         for name, start, end in _scaled_structure(structure, target.duration_s):
             lines.append(f"[{_timestamp(start)} - {_timestamp(end)}] {name}")
+
+    if own_lyrics:
+        lines.append("Lyrics:")
+        lines.append(own_lyrics)
 
     images = []
     if use_anchor_image:

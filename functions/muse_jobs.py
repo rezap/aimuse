@@ -24,6 +24,19 @@ from aimuse.pipeline import Budget, generate_track, rank
 from aimuse.presets import load_style
 
 MAX_THEME_CHARS = 200
+MAX_LYRICS_CHARS = 3000
+_REFUSAL_HINTS = ("safety", "block", "recitation", "copyright", "policy", "prohibit", "no audio")
+
+
+def friendly_engine_error(message: str) -> str:
+    """Explain refusals in plain words; keep the engine's own reason for reference."""
+    if any(h in message.lower() for h in _REFUSAL_HINTS):
+        return (
+            "Lyria declined to make this song. Its filter refuses well-known or copyrighted "
+            "lyrics (even famous public-domain poems) and named artists. Try your own words "
+            f"or change the request. Details: {message[:200]}"
+        )
+    return message
 
 
 class JobRequest(BaseModel):
@@ -35,6 +48,7 @@ class JobRequest(BaseModel):
     energy: float | None = Field(default=None, ge=0.0, le=1.0)
     vocals: bool | None = None
     inspiration: str | None = Field(default=None, max_length=MAX_REFERENCE_CHARS)
+    lyrics: str | None = Field(default=None, max_length=MAX_LYRICS_CHARS)
 
     def to_intent(self, influences: StyleTraits | None = None) -> Intent:
         vocals = None
@@ -48,6 +62,7 @@ class JobRequest(BaseModel):
             energy=self.energy,
             vocals=vocals,
             influences=influences,
+            lyrics=self.lyrics if self.lyrics and self.lyrics.strip() else None,
         )
 
 
@@ -114,6 +129,9 @@ def resolve_influences(
 
 
 def _title(req: JobRequest, station_name: str) -> str:
+    first_line = next((ln.strip() for ln in (req.lyrics or "").splitlines() if ln.strip()), "")
+    if first_line and not (req.theme and req.theme.strip()):
+        return first_line[:60]
     if req.theme and req.theme.strip():
         t = req.theme.strip()
         return t[0].upper() + t[1:60]
@@ -184,7 +202,9 @@ def process_job(
             cand = track.chosen_candidate
             if cand is None or cand.file is None:
                 errors = [c.error for c in track.candidates if c.error]
-                raise JobFailed(errors[0] if errors else "The music engine returned no audio.")
+                raise JobFailed(
+                    friendly_engine_error(errors[0]) if errors else "The engine returned no audio."
+                )
 
             mime = "audio/mpeg" if cand.file.endswith(".mp3") else "audio/wav"
             path = f"users/{uid}/tracks/{job_id}.{_EXT.get(mime, 'bin')}"
@@ -206,6 +226,7 @@ def process_job(
                 "inspiration": reference or None,
                 "influences": influences.summary() if influences else None,
                 "inspirationNote": inspiration_note,
+                "ownLyrics": bool(req.lyrics and req.lyrics.strip()),
                 "vocals": track.target.vocals == Vocals.VOCALS,
                 # False when vocals were asked for but the engine made an instrumental.
                 "vocalsDelivered": cand.vocals_ok,
