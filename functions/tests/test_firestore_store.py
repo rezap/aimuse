@@ -39,3 +39,9 @@ def test_claim_complete_and_spend(store):
     jobs.document("job2").set({"status": "queued"})
     store.fail_job(uid, "job2", "nope")
     assert jobs.document("job2").get().get("error") == "nope"
+
+
+def test_influence_cache(store):
+    assert store.get_influence("nobody-xyz") is None
+    store.save_influence("bob-dylan", "Bob Dylan", {"genres": ["folk rock"]})
+    assert store.get_influence("bob-dylan") == {"genres": ["folk rock"]}

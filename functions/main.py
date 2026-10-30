@@ -7,6 +7,8 @@ Settings (functions/.env, or the environment):
   AIMUSE_ENGINE     lyria (default) | fake  - "fake" makes synthetic audio, for the emulator
   AIMUSE_MODEL      lyria-3.5 (default) | lyria-3-clip-preview
   AIMUSE_DAILY_USD  per-user daily spending cap, default 1.00
+  AIMUSE_STYLE_MODEL  text model that turns "like <artist>" into musical traits,
+                    default gemini-3.8-flash
   AIMUSE_ALLOWED_EMAILS  comma-separated emails allowed to make songs (invite-only).
                     Empty = nobody, "*" = anyone signed in.
 Secret: GEMINI_API_KEY (`firebase functions:secrets:set GEMINI_API_KEY`).
@@ -67,6 +69,16 @@ def _is_allowed(uid: str) -> bool:
     return bool(user.email and user.email_verified and user.email.lower() in allowed)
 
 
+def _translator():
+    from aimuse.inspiration import FakeStyleTranslator, GeminiStyleTranslator
+
+    if os.environ.get("AIMUSE_ENGINE", "lyria") == "fake":
+        return FakeStyleTranslator()
+    return GeminiStyleTranslator(
+        GEMINI_API_KEY.value, model=os.environ.get("AIMUSE_STYLE_MODEL", "gemini-3.8-flash")
+    )
+
+
 def _engine():
     from aimuse.engines import FakeEngine, LyriaEngine
 
@@ -92,4 +104,5 @@ def on_job_created(event: firestore_fn.Event) -> None:
         engine_factory=_engine,
         daily_cap_usd=float(os.environ.get("AIMUSE_DAILY_USD", "1.00")),
         is_allowed=_is_allowed,
+        translator_factory=_translator,
     )

@@ -57,6 +57,9 @@ test("job requests are validated", async () => {
   await assertFails(addDoc(jobs, job({ theme: "x".repeat(201) })));
   await assertFails(addDoc(jobs, job({ trackId: "sneaky" })));
   await assertFails(addDoc(jobs, job({ createdAt: new Date(0) })));
+  await assertSucceeds(addDoc(jobs, job({ inspiration: "Bob Dylan" })));
+  await assertFails(addDoc(jobs, job({ inspiration: "x".repeat(81) })));
+  await assertFails(addDoc(jobs, job({ inspiration: 42 })));
 });
 
 test("nobody can queue jobs for someone else or edit jobs", async () => {
@@ -85,6 +88,12 @@ test("tracks: owner reads, rates and deletes; nothing else", async () => {
   await assertFails(getDoc(doc(bob, "users/alice")));
 
   await assertSucceeds(deleteDoc(t));
+});
+
+test("the artist-style cache is server-only", async () => {
+  const alice = env.authenticatedContext("alice").firestore();
+  await assertFails(getDoc(doc(alice, "influences/bob-dylan")));
+  await assertFails(setDoc(doc(alice, "influences/bob-dylan"), { traits: {} }));
 });
 
 test("audio files: only the owner can read; nobody can upload", async () => {

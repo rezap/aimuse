@@ -12,6 +12,7 @@ class MemoryStore:
         self.jobs = jobs  # job_id -> data
         self.tracks: dict = {}
         self.spend: dict = {}
+        self.influences: dict = {}
 
     def claim_job(self, uid, job_id):
         job = self.jobs.get(job_id)
@@ -31,6 +32,12 @@ class MemoryStore:
         self.tracks[job_id] = track
         self.jobs[job_id].update(status="done", trackId=job_id)
 
+    def get_influence(self, key):
+        return self.influences.get(key)
+
+    def save_influence(self, key, reference, traits):
+        self.influences[key] = traits
+
     def fail_job(self, uid, job_id, message):
         self.jobs[job_id].update(status="failed", error=message)
 
@@ -43,7 +50,7 @@ class MemoryAudio:
         self.files[path] = (data, content_type)
 
 
-def _run(store, audio, engine=None, cap=1.0, job_id="j1", allowed=True):
+def _run(store, audio, engine=None, cap=1.0, job_id="j1", allowed=True, translator=None):
     return process_job(
         "u1",
         job_id,
@@ -52,6 +59,7 @@ def _run(store, audio, engine=None, cap=1.0, job_id="j1", allowed=True):
         engine_factory=lambda: engine or FakeEngine(max_seconds=10, cost_usd=0.08),
         daily_cap_usd=cap,
         is_allowed=lambda uid: allowed,
+        translator_factory=(lambda: translator) if translator else None,
     )
 
 
@@ -149,3 +157,41 @@ def test_not_invited_user_is_refused_before_any_spend():
     assert _run(store, MemoryAudio(), engine, allowed=False) == "failed"
     assert "invite-only" in store.jobs["j1"]["error"]
     assert engine.calls == 0 and store.spend == {}
+
+
+def test_artist_inspiration_becomes_traits_never_the_name():
+    from aimuse.inspiration import FakeStyleTranslator, mentions_reference
+
+    translator = FakeStyleTranslator()
+    store = MemoryStore(
+        {"j1": _job(inspiration="Bob Dylan", vocals=True), "j2": _job(inspiration="bob  DYLAN")}
+    )
+    assert _run(store, MemoryAudio(), translator=translator, job_id="j1") == "done"
+    assert _run(store, MemoryAudio(), translator=translator, job_id="j2") == "done"
+    t = store.tracks["j1"]
+    assert t["inspiration"] == "Bob Dylan" and t["inspirationNote"] is None
+    assert t["influences"].startswith("folk rock")
+    assert "harmonica" in t["prompt"] and not mentions_reference(t["prompt"], "Bob Dylan")
+    # Translated once, then reused for the same artist (any spelling/case).
+    assert translator.calls == 1 and list(store.influences) == ["bob-dylan"]
+
+
+def test_failed_translation_still_makes_the_song():
+    from aimuse.inspiration import FakeStyleTranslator, InspirationError
+
+    class Broken(FakeStyleTranslator):
+        def translate(self, reference):
+            raise InspirationError("couldn't recognise that as a musical style")
+
+    store = MemoryStore({"j1": _job(inspiration="my cat"), "j2": _job(inspiration="x")})
+    assert _run(store, MemoryAudio(), translator=Broken(), job_id="j1") == "done"
+    assert "couldn't recognise" in store.tracks["j1"]["inspirationNote"]
+    assert store.tracks["j1"]["influences"] is None
+    assert _run(store, MemoryAudio(), job_id="j2") == "done"  # no translator configured
+    assert "not enabled" in store.tracks["j2"]["inspirationNote"]
+
+
+def test_inspiration_too_long_is_rejected():
+    store = MemoryStore({"j1": _job(inspiration="x" * 81)})
+    assert _run(store, MemoryAudio()) == "failed"
+    assert store.jobs["j1"]["error"].startswith("Invalid request")

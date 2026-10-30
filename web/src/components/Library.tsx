@@ -5,6 +5,7 @@ import { deleteObject, getDownloadURL, ref } from "firebase/storage";
 import { useEffect, useState } from "react";
 
 import { db, storage } from "@/lib/firebase";
+import { formatLyrics } from "@/lib/lyrics";
 import { formatDuration, gradient, stations } from "@/lib/music";
 import type { Track } from "@/lib/types";
 
@@ -54,6 +55,7 @@ function TrackCard({ uid, track }: { uid: string; track: Track }) {
   }
 
   const ext = track.mimeType === "audio/wav" ? "wav" : "mp3";
+  const lyrics = formatLyrics(track.lyrics);
   return (
     <li className="track">
       <div className="art" style={{ backgroundImage: gradient(palette) }} aria-hidden />
@@ -67,6 +69,13 @@ function TrackCard({ uid, track }: { uid: string; track: Track }) {
             {track.vocals && track.vocalsDelivered === false ? " · came out instrumental" : ""}
           </span>
         </div>
+        {track.inspiration && (
+          <p className="influence muted">
+            In the spirit of {track.inspiration}
+            {track.influences ? ` → ${track.influences}` : ""}
+            {track.inspirationNote ? ` · ${track.inspirationNote}` : ""}
+          </p>
+        )}
         {url ? <audio controls preload="none" src={url} /> : <p className="muted">Loading audio…</p>}
         <div className="track-actions">
           <button
@@ -94,10 +103,21 @@ function TrackCard({ uid, track }: { uid: string; track: Track }) {
             Delete
           </button>
         </div>
-        {track.lyrics && (
+        {lyrics.length > 0 && (
           <details>
             <summary>Lyrics</summary>
-            <pre>{track.lyrics}</pre>
+            <div className="lyrics">
+              {lyrics.map((section, i) => (
+                <p key={i}>
+                  {section.heading && <span className="lyric-heading">{section.heading}</span>}
+                  {section.lines.map((line, j) => (
+                    <span key={j} className="lyric-line">
+                      {line}
+                    </span>
+                  ))}
+                </p>
+              ))}
+            </div>
           </details>
         )}
       </div>

@@ -24,6 +24,7 @@ export type SongRequest = {
   theme: string | null;
   energy: number | null;
   vocals: boolean | null;
+  inspiration?: string | null;
 };
 
 /** Queue a song. The Cloud Function picks the job up and writes the track when it's ready. */
@@ -34,6 +35,7 @@ export async function requestSong(uid: string, req: SongRequest): Promise<string
     mood: req.mood,
     theme,
     energy: req.energy,
+    inspiration: req.inspiration?.trim() ? req.inspiration.trim().slice(0, 80) : null,
     vocals: req.vocals,
     status: "queued",
     createdAt: serverTimestamp(),

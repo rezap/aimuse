@@ -13,6 +13,7 @@ export function Composer({ uid }: Props) {
   const [mood, setMood] = useState<string | null>(null);
   const [energy, setEnergy] = useState(0.5);
   const [theme, setTheme] = useState("");
+  const [inspiration, setInspiration] = useState("");
   const [vocals, setVocals] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +108,24 @@ export function Composer({ uid }: Props) {
       </div>
 
       <div className="field">
+        <label htmlFor="inspiration">
+          In the spirit of… <span className="muted">(optional artist or band)</span>
+        </label>
+        <input
+          id="inspiration"
+          type="text"
+          maxLength={80}
+          placeholder="e.g. Bob Dylan, Daft Punk, 90s Britpop"
+          value={inspiration}
+          onChange={(e) => setInspiration(e.target.value)}
+        />
+        <p className="hint muted">
+          We turn this into a musical description (genre, era, instruments, vocal feel). Your
+          song is original: the artist&apos;s name, voice, lyrics and songs are never used.
+        </p>
+      </div>
+
+      <div className="field">
         <label>Vocals</label>
         <div className="chips">
           {[
@@ -129,7 +148,7 @@ export function Composer({ uid }: Props) {
         <button
           className="primary"
           disabled={busy || !station}
-          onClick={() => submit({ stationId, mood, theme, energy, vocals })}
+          onClick={() => submit({ stationId, mood, theme, energy, vocals, inspiration })}
         >
           {busy ? "Sending…" : "Make it"}
         </button>
