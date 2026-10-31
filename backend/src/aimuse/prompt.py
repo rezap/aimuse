@@ -9,7 +9,17 @@ from __future__ import annotations
 import re
 
 from .anchor import anchor_image_png
-from .models import EnginePrompt, ImageInput, Intent, Section, StyleBible, TargetSpec, Vocals
+from .models import (
+    SINGER_WORDS,
+    EnginePrompt,
+    ImageInput,
+    Intent,
+    Section,
+    Singer,
+    StyleBible,
+    TargetSpec,
+    Vocals,
+)
 
 
 def _energy_words(energy: float) -> str:
@@ -98,8 +108,24 @@ def _scaled_structure(sections: list[Section], duration_s: int) -> list[tuple[st
     return out
 
 
+def singer_for(intent: Intent) -> Singer | None:
+    """Who sings: the listener's choice, else the artist reference's voice type."""
+    if intent.singer and intent.singer != Singer.NONE:
+        return intent.singer
+    inf = intent.influences
+    if inf and inf.singer and inf.singer != Singer.NONE:
+        return inf.singer
+    return None
+
+
 def compile_target(style: StyleBible, intent: Intent) -> TargetSpec:
-    bpm = intent.bpm if intent.bpm is not None else round((style.bpm_min + style.bpm_max) / 2)
+    artist_bpm = intent.influences.bpm() if intent.influences else None
+    if intent.bpm is not None:
+        bpm = intent.bpm
+    elif artist_bpm is not None:
+        bpm = artist_bpm  # an artist reference sets the feel, tempo included
+    else:
+        bpm = round((style.bpm_min + style.bpm_max) / 2)
     key = intent.key or (style.keys[0] if style.keys else None)
     duration = intent.duration_s or style.duration_s
     vocals = intent.vocals or style.vocals
@@ -121,37 +147,46 @@ def compile_prompt(
     own_lyrics = format_user_lyrics(intent.lyrics)[0] if intent.lyrics else ""
 
     lines = [style.description.strip()]
-    lines.append(f"Genre: {', '.join(style.genres)}.")
     if inf and not inf.is_empty():
-        # The listener's artist reference, already translated into name-free traits.
+        # The listener's artist reference, already translated into name-free traits. It leads:
+        # the station's sound is only blended in.
         era = f" ({inf.era})" if inf.era else ""
-        lines.append(f"Style influences: {', '.join(inf.genres)}{era}, blended with the above.")
+        lines.append(
+            f"Genre: {', '.join(inf.genres)}{era}, blended with {', '.join(style.genres)}."
+        )
+    else:
+        lines.append(f"Genre: {', '.join(style.genres)}.")
+    singer = singer_for(intent) if sung else None
     if sung:
-        # Say it early and plainly: station descriptions can read as instrumental.
-        lines.append("This is a song with a lead singer and sung lyrics, not an instrumental.")
+        # Say it early and plainly: station descriptions can read as instrumental, and the
+        # singer's voice type is what listeners notice first.
+        who = f"a {SINGER_WORDS[singer]}" if singer else "a lead singer"
+        lines.append(f"This is a song with {who} and sung lyrics, not an instrumental.")
     if moods:
         lines.append(f"Mood: {', '.join(moods)}.")
     if intent.energy is not None:
         lines.append(f"Energy: {_energy_words(intent.energy)}.")
-    instruments = list(style.instruments)
-    if inf:
-        instruments += [i for i in inf.instrumentation if i not in instruments]
+    instruments = list(inf.instrumentation) if inf else []
+    instruments += [i for i in style.instruments if i not in instruments]
     if instruments:
         lines.append(f"Instrumentation: {', '.join(instruments)}.")
     lines.append(f"Tempo: {target.bpm} BPM.")
     if target.key:
         lines.append(f"Key: {target.key}.")
-    production = [p for p in (style.production, inf.production if inf else None) if p]
+    production = (inf.production if inf else None) or style.production
     if production:
-        lines.append(f"Production: {'; '.join(production)}.")
+        lines.append(f"Production: {production}.")
 
     if sung:
         theme = intent.theme or (style.lyric_themes[0] if style.lyric_themes else None)
-        voice = (
+        # With an artist reference its delivery replaces the station's (a "soft, breathy" station
+        # voice would otherwise fight a gravelly folk singer).
+        delivery = (
             (inf.vocal_delivery if inf else None)
             or style.vocal_style
             or "warm, expressive lead vocal with light backing harmonies"
         )
+        voice = f"{SINGER_WORDS[singer]}; {delivery}" if singer else delivery
         lines.append(f"Vocals: {voice}.")
         if own_lyrics:
             lines.append(
@@ -160,7 +195,7 @@ def compile_prompt(
         else:
             about = f" and describe {theme}" if theme else ""
             lines.append(f"The lyrics are original, in {style.lyric_language}{about}.")
-        if inf and inf.lyric_style:
+        if inf and inf.lyric_style and not own_lyrics:
             lines.append(f"Lyric style: {inf.lyric_style}.")
     else:
         lines.append("Instrumental only, no vocals.")
@@ -172,6 +207,11 @@ def compile_prompt(
     # The listener's vocals choice wins over the station's "avoid" list (e.g. "Avoid: vocals" on
     # an instrumental station when they asked for vocals).
     avoid = [a for a in style.avoid if not _mentions_vocals(a)]
+    if inf:
+        avoid += [a for a in inf.avoid if a not in avoid and (sung or not _mentions_vocals(a))]
+    if sung and singer in (Singer.MALE, Singer.FEMALE):
+        other = Singer.FEMALE if singer == Singer.MALE else Singer.MALE
+        avoid.append(f"{other.value} vocals")
     if not sung:
         avoid.append("vocals")
     if avoid:

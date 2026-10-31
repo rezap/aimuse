@@ -13,15 +13,16 @@ import tempfile
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, Field, ValidationError
 
 from aimuse.engines import EngineError, MusicEngine
 from aimuse.inspiration import MAX_REFERENCE_CHARS, InspirationError
-from aimuse.models import Intent, StyleTraits, Vocals
+from aimuse.models import Intent, Singer, StyleTraits, Vocals
 from aimuse.pipeline import Budget, generate_track, rank
 from aimuse.presets import load_style
+from aimuse.prompt import singer_for
 
 MAX_THEME_CHARS = 200
 MAX_LYRICS_CHARS = 3000
@@ -47,6 +48,7 @@ class JobRequest(BaseModel):
     theme: str | None = Field(default=None, max_length=MAX_THEME_CHARS)
     energy: float | None = Field(default=None, ge=0.0, le=1.0)
     vocals: bool | None = None
+    singer: Literal["male", "female"] | None = None
     inspiration: str | None = Field(default=None, max_length=MAX_REFERENCE_CHARS)
     lyrics: str | None = Field(default=None, max_length=MAX_LYRICS_CHARS)
 
@@ -61,6 +63,7 @@ class JobRequest(BaseModel):
             theme=theme,
             energy=self.energy,
             vocals=vocals,
+            singer=Singer(self.singer) if self.singer else None,
             influences=influences,
             lyrics=self.lyrics if self.lyrics and self.lyrics.strip() else None,
         )
@@ -107,9 +110,14 @@ def display_bpm(measured: float | None, target: int) -> float | None:
     return round(min((measured * f for f in (0.5, 1.0, 2.0)), key=lambda b: abs(b - target)), 1)
 
 
+# Bump when StyleTraits gains fields, so cached descriptions are made again (v2: singer, tempo).
+INFLUENCE_VERSION = "v2"
+
+
 def influence_key(reference: str) -> str:
     """Cache key for a reference: "Bob  DYLAN" and "bob dylan" share traits."""
-    return re.sub(r"[^a-z0-9]+", "-", reference.lower()).strip("-")[:80]
+    slug = re.sub(r"[^a-z0-9]+", "-", reference.lower()).strip("-")[:80]
+    return f"{INFLUENCE_VERSION}-{slug}" if slug else ""
 
 
 def resolve_influences(
@@ -212,6 +220,9 @@ def process_job(
             lyrics = (out / cand.lyrics_file).read_text() if cand.lyrics_file else None
 
         a = cand.analysis
+        intent = req.to_intent(influences)
+        sung = track.target.vocals == Vocals.VOCALS
+        singer = singer_for(intent) if sung else None
         store.complete_job(
             uid,
             job_id,
@@ -227,7 +238,8 @@ def process_job(
                 "influences": influences.summary() if influences else None,
                 "inspirationNote": inspiration_note,
                 "ownLyrics": bool(req.lyrics and req.lyrics.strip()),
-                "vocals": track.target.vocals == Vocals.VOCALS,
+                "vocals": sung,
+                "singer": singer.value if singer else None,
                 # False when vocals were asked for but the engine made an instrumental.
                 "vocalsDelivered": cand.vocals_ok,
                 "audioPath": path,

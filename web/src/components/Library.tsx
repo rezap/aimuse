@@ -9,6 +9,8 @@ import { formatLyrics } from "@/lib/lyrics";
 import { formatDuration, gradient, stations } from "@/lib/music";
 import type { Track } from "@/lib/types";
 
+const SINGER_LABEL = { male: "male voice", female: "female voice", duet: "duet" } as const;
+
 export function Library({ uid }: { uid: string }) {
   const [tracks, setTracks] = useState<Track[] | null>(null);
 
@@ -68,6 +70,7 @@ function TrackCard({ uid, track }: { uid: string; track: Track }) {
             {track.stationName} · {formatDuration(track.durationS)}
             {track.bpm ? ` · ${Math.round(track.bpm)} BPM` : ""}
             {track.vocals ? "" : " · instrumental"}
+            {track.vocals && track.singer ? ` · ${SINGER_LABEL[track.singer]}` : ""}
             {track.vocals && track.vocalsDelivered === false ? " · came out instrumental" : ""}
           </span>
         </div>

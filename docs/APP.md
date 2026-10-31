@@ -24,11 +24,25 @@
   "invite-only" message, and nothing is spent. `*` lets anyone in.
 - **Artist style ("In the spirit of…")**: the listener can name an artist or band. A Gemini
   text model (`AIMUSE_STYLE_MODEL`, default `gemini-3.8-flash`) turns it into musical traits
-  only: genre, era, instruments, production, vocal delivery and lyric style. Any word of the
-  name that leaks into the traits is removed, so only the traits reach Lyria and the song is
-  original. Traits are cached per artist in the server-only `influences` collection, so the
-  same artist always gives the same description. If translation fails, the song is still
-  made, with a note.
+  only, and any word of the name that leaks into them is removed, so the song is original.
+  The traits lead the song:
+
+  | Setting | With an artist reference |
+  |---|---|
+  | Genre | the artist's genres and era, blended with the station's |
+  | Singer | the artist's voice type (male, female, duet), unless the listener picks one |
+  | Vocal delivery | the artist's (register, texture, phrasing), replacing the station's |
+  | Tempo | the artist's typical tempo, unless the listener sets one |
+  | Instruments | the artist's first, then the station's |
+  | Production | the artist's, replacing the station's |
+  | Mood, key, structure | the station's (mood: the listener's choice wins) |
+  | Avoid | the station's, plus sounds that would break the artist's style and the other voice type |
+
+  Traits are cached per artist in the server-only `influences` collection (keys carry a
+  version, e.g. `v2-bob-dylan`), so the same artist always gives the same description. If
+  translation fails, the song is still made, with a note.
+- **Singer**: Any / Male / Female (with an artist: Like the artist / Male / Female). The song
+  card shows the voice that was asked for.
 - **Own lyrics**: "✍️ Use my own lyrics" (or pasting multi-line text into the topic field)
   sends up to 3000 characters. They go to Lyria under a `Lyrics:` header with `[Verse n]`
   tags (the listener's own tags are kept), always sung, and the song length follows the

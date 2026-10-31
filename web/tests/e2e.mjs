@@ -31,6 +31,10 @@ try {
   if (!influence.includes("In the spirit of Bob Dylan") || !influence.includes("folk rock")) {
     throw new Error(`artist style not shown: ${JSON.stringify(influence)}`);
   }
+  // The artist's description includes who sings (this first song is instrumental, so no voice).
+  if (!influence.includes("male lead singer")) {
+    throw new Error(`artist singer not described: ${JSON.stringify(influence)}`);
+  }
   await page.locator("li.track summary", { hasText: "Lyrics" }).first().click();
   const lyrics = await page.locator("li.track .lyrics").first().innerText();
   if (!lyrics.includes("Fake engine sings softly") || lyrics.includes("[0.0")) {
@@ -43,8 +47,13 @@ try {
   // Second song from the listener's own lyrics.
   await page.getByRole("button", { name: /Use my own lyrics/ }).click();
   await page.locator("#lyrics").fill("Paper boats on a silver stream\nCarry every little dream\n\nLet them sail into the light");
+  await page.getByRole("button", { name: "Female", exact: true }).click();
   await page.getByRole("button", { name: "Make it" }).click();
-  await page.locator("li.track", { hasText: "Paper boats on a silver stream" }).waitFor({ timeout: 180000 });
+  const boats = page.locator("li.track", { hasText: "Paper boats on a silver stream" });
+  await boats.waitFor({ timeout: 180000 });
+  if (!(await boats.innerText()).includes("female voice")) {
+    throw new Error("the listener's singer choice was not used");
+  }
   await shot("3-own-lyrics");
   console.log(`E2E OK: ${head.replace(/\n/g, " | ")}`);
 } catch (e) {

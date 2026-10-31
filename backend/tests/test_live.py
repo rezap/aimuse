@@ -135,13 +135,22 @@ def test_vocals_requested_are_sung(station, model, tmp_path):
     assert cand.vocals_ok, f"{name}: vocals requested but Lyria returned {lyrics.strip()[:80]!r}"
 
 
-# Artist style: the real text model turns a reference into traits, the name never reaches Lyria,
-# and Lyria accepts the prompt (no safety block). About $0.08 per run (2 clips + 2 tiny text calls).
-ARTIST_CASES = [("Bob Dylan", "rainy-morning-indie"), ("Daft Punk", "sunset-synthpop")]
+# Artist style: the real text model turns a reference into traits (including the singer's voice
+# type), the name never reaches Lyria, and Lyria accepts the prompt (no safety block). Bob Dylan
+# runs on the soft, breathy-voiced station on purpose: that combination came out with a female
+# voice before the artist's traits led the prompt. Listen to the clips to judge the voice.
+# About $0.12 per run (3 clips + 3 tiny text calls).
+ARTIST_CASES = [
+    ("Bob Dylan", "rainy-morning-indie", "male"),
+    ("Joni Mitchell", "rainy-morning-indie", "female"),
+    ("Daft Punk", "sunset-synthpop", None),
+]
 
 
-@pytest.mark.parametrize("reference,station", ARTIST_CASES, ids=[r for r, _ in ARTIST_CASES])
-def test_artist_style_is_described_not_named(reference, station, tmp_path):
+@pytest.mark.parametrize(
+    "reference,station,singer", ARTIST_CASES, ids=[r for r, _, _ in ARTIST_CASES]
+)
+def test_artist_style_is_described_not_named(reference, station, singer, tmp_path):
     from aimuse.inspiration import GeminiStyleTranslator, mentions_reference
     from aimuse.prompt import compile_prompt
 
@@ -152,9 +161,14 @@ def test_artist_style_is_described_not_named(reference, station, tmp_path):
     assert not traits.is_empty()
     assert not mentions_reference(traits.model_dump_json(), reference)
 
+    from aimuse.models import Vocals
+
     style = load_style(station)
-    intent = style.example_intents[0].model_copy(update={"duration_s": 30, "influences": traits})
-    assert not mentions_reference(compile_prompt(style, intent).text, reference)
+    intent = style.example_intents[0].model_copy(
+        update={"duration_s": 30, "influences": traits, "vocals": Vocals.VOCALS}
+    )
+    prompt = compile_prompt(style, intent).text
+    assert not mentions_reference(prompt, reference)
     engine = LyriaEngine(key, model="lyria-3-clip-preview")
     name = re.sub(r"\W+", "-", reference.lower())
     track = generate_track(
@@ -171,10 +185,14 @@ def test_artist_style_is_described_not_named(reference, station, tmp_path):
     with (out / "artist-summary.md").open("a") as f:
         verdict = "✅" if cand.error is None else f"❌ {cand.error}"
         f.write(
-            f"| {reference} | {station} | {traits.summary()} | "
-            f"{traits.vocal_delivery or '–'} | {verdict} | `{cand.file}` |\n"
+            f"| {reference} | {station} | {traits.summary()} | {traits.singer or '–'}; "
+            f"{traits.vocal_delivery or '–'} | {traits.bpm() or '–'} BPM | {verdict} | "
+            f"`{cand.file}` |\n"
         )
     assert cand.error is None, cand.error
+    if singer:
+        assert traits.singer == singer, f"{reference}: expected a {singer} singer, got {traits}"
+        assert f"with a {singer} lead singer" in prompt
 
 
 # Own lyrics: does Lyria sing the listener's words? The original text must work. The famous poem
