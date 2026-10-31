@@ -15,6 +15,15 @@ class Vocals(StrEnum):
     INSTRUMENTAL = "instrumental"
 
 
+class Singer(StrEnum):
+    """Who sings lead. A plain voice type, never a particular person's voice."""
+
+    MALE = "male"
+    FEMALE = "female"
+    DUET = "duet"  # male and female
+    NONE = "none"  # an instrumental act (only ever comes from an artist reference)
+
+
 class Key(BaseModel):
     """A musical key such as "A minor" or "F# major"."""
 
@@ -89,21 +98,52 @@ class StyleBible(BaseModel):
         return self
 
 
+SINGER_WORDS = {
+    Singer.MALE: "male lead singer",
+    Singer.FEMALE: "female lead singer",
+    Singer.DUET: "male and female singers",
+}
+
+
 class StyleTraits(BaseModel):
-    """Musical traits of an artist/style the listener likes. Never contains names."""
+    """Musical traits of an artist/style the listener likes. Never contains names.
+
+    An artist reference drives the song: its genres lead, its singer, vocal delivery,
+    production and tempo replace the station's, and its instruments come first. The station
+    still sets the mood, key and structure, and the listener's own choices win over both.
+    """
 
     genres: list[str] = Field(default_factory=list)
     era: str | None = None
     instrumentation: list[str] = Field(default_factory=list)
     production: str | None = None
-    vocal_delivery: str | None = None
+    singer: Singer | None = None
+    vocal_delivery: str | None = None  # register, texture, phrasing; no gender (that's singer)
     lyric_style: str | None = None
+    bpm_min: int | None = Field(default=None, ge=40, le=220)
+    bpm_max: int | None = Field(default=None, ge=40, le=220)
+    avoid: list[str] = Field(default_factory=list)
+
+    @field_validator("singer", mode="before")
+    @classmethod
+    def _known_singer(cls, v):
+        # Text models occasionally answer outside the enum ("unknown", "group"); treat as unsaid.
+        return v if v in {s.value for s in Singer} or isinstance(v, Singer) else None
+
+    def bpm(self) -> int | None:
+        """Typical tempo for this style, or None if the model didn't say."""
+        lo, hi = self.bpm_min, self.bpm_max or self.bpm_min
+        if lo is None:
+            return hi
+        return round((lo + max(lo, hi)) / 2)
 
     def summary(self) -> str:
         """One line for people (shown in the app next to the song)."""
         parts = [", ".join(self.genres)]
         if self.era:
             parts.append(self.era)
+        if self.singer and self.singer != Singer.NONE:
+            parts.append(SINGER_WORDS[self.singer])
         if self.instrumentation:
             parts.append(", ".join(self.instrumentation[:4]))
         return " · ".join(p for p in parts if p)
@@ -123,6 +163,7 @@ class Intent(BaseModel):
     bpm: int | None = Field(default=None, ge=40, le=220)
     key: str | None = None
     vocals: Vocals | None = None
+    singer: Singer | None = None  # the listener's choice; wins over the artist reference
     duration_s: int | None = Field(default=None, ge=10, le=240)
     influences: StyleTraits | None = None
     lyrics: str | None = Field(default=None, max_length=3000)  # the listener's own words

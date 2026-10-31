@@ -12,8 +12,8 @@ service cloud.firestore {
     }
 
     function validJob(d) {
-      return d.keys().hasOnly(['stationId', 'mood', 'theme', 'energy', 'vocals', 'inspiration',
-                               'lyrics', 'status', 'createdAt'])
+      return d.keys().hasOnly(['stationId', 'mood', 'theme', 'energy', 'vocals', 'singer',
+                               'inspiration', 'lyrics', 'status', 'createdAt'])
         && d.status == 'queued'
         && d.createdAt == request.time
         && d.stationId is string && d.stationId.size() > 0 && d.stationId.size() <= 64
@@ -22,6 +22,7 @@ service cloud.firestore {
         && (!('energy' in d) || d.energy == null
             || (d.energy is number && d.energy >= 0 && d.energy <= 1))
         && (!('vocals' in d) || d.vocals == null || d.vocals is bool)
+        && (!('singer' in d) || d.singer == null || d.singer in ['male', 'female'])
         && (!('inspiration' in d) || d.inspiration == null
             || (d.inspiration is string && d.inspiration.size() <= 80))
         && (!('lyrics' in d) || d.lyrics == null

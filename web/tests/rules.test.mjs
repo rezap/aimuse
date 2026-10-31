@@ -61,6 +61,8 @@ test("job requests are validated", async () => {
   await assertFails(addDoc(jobs, job({ inspiration: "x".repeat(81) })));
   await assertFails(addDoc(jobs, job({ inspiration: 42 })));
   await assertSucceeds(addDoc(jobs, job({ lyrics: "line one\nline two" })));
+  await assertSucceeds(addDoc(jobs, job({ singer: "female" })));
+  await assertFails(addDoc(jobs, job({ singer: "robot" })));
   await assertFails(addDoc(jobs, job({ lyrics: "x".repeat(3001) })));
 });
 
