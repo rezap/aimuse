@@ -83,6 +83,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .job.failed .dot { background: var(--err); animation: none; }
 .job .full { flex-basis: 100%; margin: 0 0 0 20px; font-size: 0.9rem; }
 .grow { flex: 1; min-width: 0; }
+.row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.row h2 { margin: 0; }
 @keyframes pulse { 50% { opacity: 0.3; } }
 
 .track { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
