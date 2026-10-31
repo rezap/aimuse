@@ -20,6 +20,7 @@ export type Job = {
   theme: string | null;
   energy: number | null;
   vocals: boolean | null;
+  lyrics?: string | null;
   status: JobStatus;
   error?: string;
   createdAt?: Timestamp;

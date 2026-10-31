@@ -75,6 +75,24 @@ test("nobody can queue jobs for someone else or edit jobs", async () => {
   await assertFails(updateDoc(r, { status: "done" }));
 });
 
+test("owner can clear finished, failed or stuck jobs, not running ones", async () => {
+  const minutesAgo = (m) => new Date(Date.now() - m * 60_000);
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    const db = ctx.firestore();
+    await setDoc(doc(db, "users/alice/jobs/failed"), job({ status: "failed", createdAt: new Date() }));
+    await setDoc(doc(db, "users/alice/jobs/done"), job({ status: "done", createdAt: new Date() }));
+    await setDoc(doc(db, "users/alice/jobs/running"), job({ status: "running", createdAt: minutesAgo(1) }));
+    await setDoc(doc(db, "users/alice/jobs/stuck"), job({ status: "running", createdAt: minutesAgo(20) }));
+  });
+  const bob = env.authenticatedContext("bob").firestore();
+  await assertFails(deleteDoc(doc(bob, "users/alice/jobs/failed")));
+  const alice = env.authenticatedContext("alice").firestore();
+  await assertSucceeds(deleteDoc(doc(alice, "users/alice/jobs/failed")));
+  await assertSucceeds(deleteDoc(doc(alice, "users/alice/jobs/done")));
+  await assertFails(deleteDoc(doc(alice, "users/alice/jobs/running")));
+  await assertSucceeds(deleteDoc(doc(alice, "users/alice/jobs/stuck")));
+});
+
 test("tracks: owner reads, rates and deletes; nothing else", async () => {
   const alice = env.authenticatedContext("alice").firestore();
   const t = doc(alice, "users/alice/tracks/t1");

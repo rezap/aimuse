@@ -52,6 +52,8 @@ function TrackCard({ uid, track }: { uid: string; track: Track }) {
     if (!confirm(`Delete "${track.title}"?`)) return;
     await deleteObject(ref(storage, track.audioPath)).catch(() => undefined);
     await deleteDoc(trackRef);
+    // The song's job (same id) is no longer needed either.
+    await deleteDoc(doc(db, "users", uid, "jobs", track.id)).catch(() => undefined);
   }
 
   const ext = track.mimeType === "audio/wav" ? "wav" : "mp3";

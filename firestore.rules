@@ -1,7 +1,9 @@
 rules_version = '2';
 
 // Clients only ever touch their own data under users/{uid}.
-// Jobs: the app may create a "queued" request; only the Cloud Function moves it on.
+// Jobs: the app may create a "queued" request; only the Cloud Function moves it on. The owner
+// may clear a job once it has finished or failed, or once it is clearly stuck (the function
+// times out after 9 minutes).
 // Tracks: written by the Cloud Function; the owner may rate or delete them.
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -33,7 +35,10 @@ service cloud.firestore {
       match /jobs/{jobId} {
         allow read: if isOwner(uid);
         allow create: if isOwner(uid) && validJob(request.resource.data);
-        allow update, delete: if false;
+        allow delete: if isOwner(uid)
+          && (resource.data.status in ['done', 'failed']
+              || request.time > resource.data.createdAt + duration.value(15, 'm'));
+        allow update: if false;
       }
 
       match /tracks/{trackId} {
