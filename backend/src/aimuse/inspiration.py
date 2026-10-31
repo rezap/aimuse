@@ -16,7 +16,7 @@ import httpx
 from pydantic import ValidationError
 
 from .engines.lyria import API_URL
-from .models import StyleTraits
+from .models import Singer, StyleTraits
 
 DEFAULT_MODEL = "gemini-3.8-flash"
 MAX_REFERENCE_CHARS = 80
@@ -24,13 +24,21 @@ MAX_REFERENCE_CHARS = 80
 SYSTEM_INSTRUCTION = """\
 You help a music app describe musical styles. The user names an artist, band or style they
 like. Describe that style ONLY in general musical terms so a music generator can make an
-original song in a similar spirit.
+original song in a similar spirit. The description replaces the app's own defaults, so be
+specific about everything a listener would recognise: genre, era, who sings and how,
+instruments, production and typical tempo.
 
 Rules:
 - Never write any proper noun: no artist, band, person, song, album, label or place names.
 - Never quote or paraphrase lyrics. Never mention a specific song.
-- Describe the vocal delivery generically (register, texture, phrasing) and never say it
-  imitates or sounds like any person.
+- singer: the voice type of the lead singer on most of their best-known recordings: "male",
+  "female", "duet" (male and female leads) or "none" (instrumental act). For a style or genre
+  rather than an artist, give the most typical voice type.
+- vocal_delivery: register, texture and phrasing in generic terms (e.g. "nasal, reedy tenor,
+  half-spoken phrasing"). Do not mention gender here, and never say it imitates or sounds like
+  any person.
+- bpm_min / bpm_max: the typical tempo range of their songs.
+- avoid: 1-3 sounds that would make a song clearly NOT in this style.
 - Keep each field short (a few words to one sentence).
 - If the input is not a musician or musical style, or you are unsure, return empty genres.
 """
@@ -42,10 +50,14 @@ TRAITS_SCHEMA = {
         "era": {"type": "string", "description": "e.g. 'early 1960s'"},
         "instrumentation": {"type": "array", "items": {"type": "string"}},
         "production": {"type": "string"},
+        "singer": {"type": "string", "enum": ["male", "female", "duet", "none"]},
         "vocal_delivery": {"type": "string"},
         "lyric_style": {"type": "string"},
+        "bpm_min": {"type": "integer"},
+        "bpm_max": {"type": "integer"},
+        "avoid": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["genres", "instrumentation"],
+    "required": ["genres", "instrumentation", "singer", "vocal_delivery", "bpm_min", "bpm_max"],
 }
 
 _STOPWORDS = {"the", "and", "band", "feat", "featuring", "with", "like", "style", "his", "her"}
@@ -75,13 +87,16 @@ def scrub(traits: StyleTraits, reference: str) -> StyleTraits:
             return None  # nothing but filler left, e.g. "The" from "The Beatles"
         return out
 
-    return StyleTraits(
-        genres=[c for g in traits.genres if (c := clean(g))],
-        era=clean(traits.era),
-        instrumentation=[c for i in traits.instrumentation if (c := clean(i))],
-        production=clean(traits.production),
-        vocal_delivery=clean(traits.vocal_delivery),
-        lyric_style=clean(traits.lyric_style),
+    return traits.model_copy(
+        update={
+            "genres": [c for g in traits.genres if (c := clean(g))],
+            "era": clean(traits.era),
+            "instrumentation": [c for i in traits.instrumentation if (c := clean(i))],
+            "production": clean(traits.production),
+            "vocal_delivery": clean(traits.vocal_delivery),
+            "lyric_style": clean(traits.lyric_style),
+            "avoid": [c for a in traits.avoid if (c := clean(a))],
+        }
     )
 
 
@@ -138,8 +153,13 @@ class GeminiStyleTranslator:
             if block.get("type") == "text"
         )
         try:
-            traits = StyleTraits.model_validate(json.loads(text))
-        except (ValueError, ValidationError) as e:
+            data = json.loads(text)
+            # An implausible tempo shouldn't throw the whole description away.
+            for k in ("bpm_min", "bpm_max"):
+                if not isinstance(data.get(k), int) or not 40 <= data[k] <= 220:
+                    data.pop(k, None)
+            traits = StyleTraits.model_validate(data)
+        except (ValueError, ValidationError, AttributeError) as e:
             raise InspirationError("style model returned unusable output") from e
         traits = scrub(traits, reference)
         if traits.is_empty():
@@ -162,6 +182,10 @@ class FakeStyleTranslator:
             era="1960s",
             instrumentation=["acoustic guitar", "harmonica"],
             production="raw, live-in-the-room",
+            singer=Singer.MALE,
             vocal_delivery="conversational, slightly rough storytelling vocal",
             lyric_style="poetic, story-driven lyrics",
+            bpm_min=80,
+            bpm_max=110,
+            avoid=["polished studio pop"],
         )

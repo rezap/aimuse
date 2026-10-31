@@ -2,7 +2,15 @@
 
 import { useState } from "react";
 
-import { gradient, MOODS, requestSong, stations, surpriseRequest, type SongRequest } from "@/lib/music";
+import {
+  gradient,
+  MOODS,
+  requestSong,
+  stations,
+  surpriseRequest,
+  type Singer,
+  type SongRequest,
+} from "@/lib/music";
 
 type Props = { uid: string };
 
@@ -19,6 +27,7 @@ export function Composer({ uid }: Props) {
   const [lyricsMode, setLyricsMode] = useState(false);
   const [lyrics, setLyrics] = useState("");
   const [vocals, setVocals] = useState<boolean | null>(null);
+  const [singer, setSinger] = useState<Singer | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -167,8 +176,9 @@ export function Composer({ uid }: Props) {
           onChange={(e) => setInspiration(e.target.value)}
         />
         <p className="hint muted">
-          We turn this into a musical description (genre, era, instruments, vocal feel). Your
-          song is original: the artist&apos;s name, voice, lyrics and songs are never used.
+          We turn this into a musical description (genre, era, singer, instruments, tempo,
+          production) that leads the song. Your song is original: the artist&apos;s name, voice,
+          lyrics and songs are never used.
         </p>
       </div>
 
@@ -191,6 +201,25 @@ export function Composer({ uid }: Props) {
         </div>
       </div>
 
+      <div className="field" hidden={!lyricsMode && vocals === false}>
+        <label>Singer</label>
+        <div className="chips">
+          {[
+            { v: null, label: inspiration.trim() ? "Like the artist" : "Any" },
+            { v: "male" as const, label: "Male" },
+            { v: "female" as const, label: "Female" },
+          ].map((o) => (
+            <button
+              key={String(o.v)}
+              className={`chip ${singer === o.v ? "on" : ""}`}
+              onClick={() => setSinger(o.v)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="actions">
         <button
           className="primary"
@@ -202,6 +231,7 @@ export function Composer({ uid }: Props) {
               theme,
               energy,
               vocals: lyricsMode ? true : vocals,
+              singer,
               inspiration,
               lyrics: lyricsMode ? lyrics : null,
             })

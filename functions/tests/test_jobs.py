@@ -173,7 +173,28 @@ def test_artist_inspiration_becomes_traits_never_the_name():
     assert t["influences"].startswith("folk rock")
     assert "harmonica" in t["prompt"] and not mentions_reference(t["prompt"], "Bob Dylan")
     # Translated once, then reused for the same artist (any spelling/case).
-    assert translator.calls == 1 and list(store.influences) == ["bob-dylan"]
+    assert translator.calls == 1 and list(store.influences) == ["v2-bob-dylan"]
+    # The artist's voice type carries through: "like Bob Dylan" is sung by a man.
+    assert t["singer"] == "male" and "male lead singer" in t["influences"]
+    assert "This is a song with a male lead singer" in t["prompt"]
+
+
+def test_listener_singer_choice_and_validation():
+    store = MemoryStore(
+        {
+            "j1": _job(singer="female", inspiration="Bob Dylan", vocals=True),
+            "j2": _job(singer="robot"),
+            "j3": _job(singer="male", vocals=False),
+        }
+    )
+    from aimuse.inspiration import FakeStyleTranslator
+
+    assert _run(store, MemoryAudio(), translator=FakeStyleTranslator(), job_id="j1") == "done"
+    assert store.tracks["j1"]["singer"] == "female"
+    assert "with a female lead singer" in store.tracks["j1"]["prompt"]
+    assert _run(store, MemoryAudio(), job_id="j2") == "failed"
+    assert _run(store, MemoryAudio(), job_id="j3") == "done"
+    assert store.tracks["j3"]["singer"] is None  # instrumental: nobody sings
 
 
 def test_failed_translation_still_makes_the_song():

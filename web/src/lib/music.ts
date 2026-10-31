@@ -18,12 +18,16 @@ export const MOODS = [
   "euphoric",
 ] as const;
 
+/** Who sings lead. Unset = the artist reference's voice type, else Lyria's choice. */
+export type Singer = "male" | "female";
+
 export type SongRequest = {
   stationId: string;
   mood: string | null;
   theme: string | null;
   energy: number | null;
   vocals: boolean | null;
+  singer?: Singer | null;
   inspiration?: string | null;
   lyrics?: string | null;
 };
@@ -39,6 +43,7 @@ export async function requestSong(uid: string, req: SongRequest): Promise<string
     inspiration: req.inspiration?.trim() ? req.inspiration.trim().slice(0, 80) : null,
     lyrics: req.lyrics?.trim() ? req.lyrics.trim().slice(0, 3000) : null,
     vocals: req.vocals,
+    singer: req.vocals === false ? null : (req.singer ?? null),
     status: "queued",
     createdAt: serverTimestamp(),
   });

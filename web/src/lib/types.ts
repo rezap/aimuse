@@ -34,6 +34,7 @@ export type Track = {
   mood: string | null;
   theme: string | null;
   vocals: boolean;
+  singer?: "male" | "female" | "duet" | null;
   vocalsDelivered?: boolean | null;
   inspiration?: string | null;
   influences?: string | null;
