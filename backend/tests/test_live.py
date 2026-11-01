@@ -139,9 +139,12 @@ def test_vocals_requested_are_sung(station, model, tmp_path):
 # type), the name never reaches Lyria, and Lyria accepts the prompt (no safety block). Bob Dylan
 # runs on the soft, breathy-voiced station on purpose: that combination came out with a female
 # voice before the artist's traits led the prompt. Listen to the clips to judge the voice.
-# About $0.12 per run (3 clips + 3 tiny text calls).
+# "Bob Dylan 1997" checks that a period changes the description (era and voice). Each case's
+# full description is saved next to its clip as <name>.traits.json.
+# About $0.16 per run (4 clips + 4 tiny text calls).
 ARTIST_CASES = [
     ("Bob Dylan", "rainy-morning-indie", "male"),
+    ("Bob Dylan 1997", "rainy-morning-indie", "male"),
     ("Joni Mitchell", "rainy-morning-indie", "female"),
     ("Daft Punk", "sunset-synthpop", None),
 ]
@@ -181,12 +184,13 @@ def test_artist_style_is_described_not_named(reference, station, singer, tmp_pat
         budget=Budget(engine.price_per_request_usd),
     )
     write_recipe(track, style, out)
+    (out / f"{name}.traits.json").write_text(traits.model_dump_json(indent=2))
     cand = track.candidates[0]
     with (out / "artist-summary.md").open("a") as f:
         verdict = "✅" if cand.error is None else f"❌ {cand.error}"
         f.write(
             f"| {reference} | {station} | {traits.summary()} | {traits.singer or '–'}; "
-            f"{traits.vocal_delivery or '–'} | {traits.bpm() or '–'} BPM | {verdict} | "
+            f"{traits.voice_text() or '–'} | {traits.bpm() or '–'} BPM | {verdict} | "
             f"`{cand.file}` |\n"
         )
     assert cand.error is None, cand.error

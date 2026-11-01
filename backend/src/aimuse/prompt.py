@@ -118,6 +118,28 @@ def singer_for(intent: Intent) -> Singer | None:
     return None
 
 
+def voice_description(style: StyleBible, intent: Intent) -> str:
+    """The sung voice: who sings, the artist's (or station's) voice, and the listener's nudges.
+
+    With an artist reference its voice replaces the station's (a "soft, breathy" station voice
+    would otherwise fight a gravelly folk singer).
+    """
+    inf = intent.influences
+    if inf and inf.voice and intent.singer and intent.singer != inf.singer:
+        # The listener chose another voice type: the artist's register ("baritone") no longer
+        # applies, but texture, phrasing and recording still do.
+        inf = inf.model_copy(update={"voice": inf.voice.model_copy(update={"voice_type": None})})
+    delivery = (
+        (inf.voice_text() if inf else None)
+        or style.vocal_style
+        or "warm, expressive lead vocal with light backing harmonies"
+    )
+    singer = singer_for(intent)
+    voice = f"{SINGER_WORDS[singer]}; {delivery}" if singer else delivery
+    tweaks = intent.voice_tweaks.describe() if intent.voice_tweaks else ""
+    return f"{voice}; {tweaks}" if tweaks else voice
+
+
 def compile_target(style: StyleBible, intent: Intent) -> TargetSpec:
     artist_bpm = intent.influences.bpm() if intent.influences else None
     if intent.bpm is not None:
@@ -179,14 +201,7 @@ def compile_prompt(
 
     if sung:
         theme = intent.theme or (style.lyric_themes[0] if style.lyric_themes else None)
-        # With an artist reference its delivery replaces the station's (a "soft, breathy" station
-        # voice would otherwise fight a gravelly folk singer).
-        delivery = (
-            (inf.vocal_delivery if inf else None)
-            or style.vocal_style
-            or "warm, expressive lead vocal with light backing harmonies"
-        )
-        voice = f"{SINGER_WORDS[singer]}; {delivery}" if singer else delivery
+        voice = voice_description(style, intent)
         lines.append(f"Vocals: {voice}.")
         if own_lyrics:
             lines.append(

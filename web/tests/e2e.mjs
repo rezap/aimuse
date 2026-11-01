@@ -17,6 +17,12 @@ try {
   await page.getByRole("button", { name: "calm", exact: true }).click();
   await page.locator("#theme").fill("rain on a neon city");
   await page.locator("#inspiration").fill("Bob Dylan");
+  // The second song (own lyrics) is sung: check the voice preview and nudges there. This first
+  // one is on the instrumental station, so the voice controls stay hidden.
+  if (await page.getByText("Adjust the voice").isVisible()) {
+    throw new Error("voice controls shown for an instrumental song");
+  }
+  await page.getByTestId("artist-preview").waitFor({ timeout: 60000 });
   await shot("1-composer");
   await page.getByRole("button", { name: "Make it" }).click();
   await page.locator("li.track audio").first().waitFor({ timeout: 180000 });
@@ -48,11 +54,25 @@ try {
   await page.getByRole("button", { name: /Use my own lyrics/ }).click();
   await page.locator("#lyrics").fill("Paper boats on a silver stream\nCarry every little dream\n\nLet them sail into the light");
   await page.getByRole("button", { name: "Female", exact: true }).click();
+  // The artist's voice is previewed before the song is made; nudge it and check it is saved.
+  const voicePreview = await page.getByTestId("voice-preview").innerText();
+  if (!voicePreview.includes("baritone, narrow range")) {
+    throw new Error(`voice preview missing: ${JSON.stringify(voicePreview)}`);
+  }
+  await page.getByRole("button", { name: "Rougher", exact: true }).click();
+  await page.locator("#inspiration").fill("");
+  await page.locator("#inspiration").fill("Bob Dylan");
+  await page.getByTestId("voice-preview").waitFor({ timeout: 60000 });
+  await page.locator('button[aria-pressed="true"]', { hasText: "Rougher" }).waitFor({ timeout: 10000 });
   await page.getByRole("button", { name: "Make it" }).click();
   const boats = page.locator("li.track", { hasText: "Paper boats on a silver stream" });
   await boats.waitFor({ timeout: 180000 });
-  if (!(await boats.innerText()).includes("female voice")) {
+  const boatsText = await boats.innerText();
+  if (!boatsText.includes("female voice")) {
     throw new Error("the listener's singer choice was not used");
+  }
+  if (!boatsText.includes("Voice: female lead singer; nasal, reedy") || !boatsText.includes("rougher")) {
+    throw new Error(`voice and nudge not used: ${JSON.stringify(boatsText)}`);
   }
   await shot("3-own-lyrics");
   console.log(`E2E OK: ${head.replace(/\n/g, " | ")}`);

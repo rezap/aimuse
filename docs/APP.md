@@ -31,18 +31,24 @@
   |---|---|
   | Genre | the artist's genres and era, blended with the station's |
   | Singer | the artist's voice type (male, female, duet), unless the listener picks one |
-  | Vocal delivery | the artist's (register, texture, phrasing), replacing the station's |
+  | Voice | a detailed profile, replacing the station's: voice type and range, texture, phrasing, pitch and vibrato, character, how it's recorded, backing vocals |
   | Tempo | the artist's typical tempo, unless the listener sets one |
   | Instruments | the artist's first, then the station's |
   | Production | the artist's, replacing the station's |
   | Mood, key, structure | the station's (mood: the listener's choice wins) |
   | Avoid | the station's, plus sounds that would break the artist's style and the other voice type |
 
+  A period can be named ("Bob Dylan 1965"); otherwise the best-known period is described.
   Traits are cached per artist in the server-only `influences` collection (keys carry a
-  version, e.g. `v2-bob-dylan`), so the same artist always gives the same description. If
+  version, e.g. `v3-bob-dylan`), so the same artist always gives the same description. If
   translation fails, the song is still made, with a note.
-- **Singer**: Any / Male / Female (with an artist: Like the artist / Male / Female). The song
-  card shows the voice that was asked for.
+- **Singer**: Any / Male / Female (with an artist: Like the artist / Male / Female). Picking
+  the other voice type drops the artist's range but keeps the rest of the voice.
+- **Voice preview and nudges**: a moment after an artist is typed, the callable function
+  `describe_artist` returns the cached description (the same one the song will use), and the
+  app shows its genre line and voice. Lower/Higher, Smoother/Rougher, More sung/More spoken and
+  Drier/More reverb nudge the voice; they are saved per artist in `users/{uid}/voices/{artist}`
+  and come back next time. The song card shows the full voice that was asked for.
 - **Own lyrics**: "✍️ Use my own lyrics" (or pasting multi-line text into the topic field)
   sends up to 3000 characters. They go to Lyria under a `Lyrics:` header with `[Verse n]`
   tags (the listener's own tags are kept), always sung, and the song length follows the
