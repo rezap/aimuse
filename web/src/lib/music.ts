@@ -3,6 +3,7 @@ import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 import stationsJson from "./stations.json";
 import type { Station } from "./types";
+import { hasTweaks, type VoiceTweaks } from "./voice";
 
 export const stations = stationsJson as Station[];
 
@@ -28,6 +29,7 @@ export type SongRequest = {
   energy: number | null;
   vocals: boolean | null;
   singer?: Singer | null;
+  voiceTweaks?: VoiceTweaks | null;
   inspiration?: string | null;
   lyrics?: string | null;
 };
@@ -44,6 +46,8 @@ export async function requestSong(uid: string, req: SongRequest): Promise<string
     lyrics: req.lyrics?.trim() ? req.lyrics.trim().slice(0, 3000) : null,
     vocals: req.vocals,
     singer: req.vocals === false ? null : (req.singer ?? null),
+    voiceTweaks:
+      req.vocals !== false && req.voiceTweaks && hasTweaks(req.voiceTweaks) ? req.voiceTweaks : null,
     status: "queued",
     createdAt: serverTimestamp(),
   });

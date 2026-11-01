@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import {
   gradient,
@@ -11,6 +11,21 @@ import {
   type Singer,
   type SongRequest,
 } from "@/lib/music";
+import {
+  type ArtistPreview,
+  describeArtist,
+  loadTweaks,
+  NO_TWEAKS,
+  saveTweaks,
+  TWEAKS,
+  type VoiceTweaks,
+} from "@/lib/voice";
+
+type Preview =
+  | { state: "idle" }
+  | { state: "loading"; reference: string }
+  | { state: "ready"; reference: string; data: ArtistPreview }
+  | { state: "error"; reference: string; message: string };
 
 type Props = { uid: string };
 
@@ -28,10 +43,48 @@ export function Composer({ uid }: Props) {
   const [lyrics, setLyrics] = useState("");
   const [vocals, setVocals] = useState<boolean | null>(null);
   const [singer, setSinger] = useState<Singer | null>(null);
+  const [tweaks, setTweaks] = useState<VoiceTweaks>(NO_TWEAKS);
+  const [preview, setPreview] = useState<Preview>({ state: "idle" });
+
+  // Preview what the artist reference means (a moment after typing stops), and bring back the
+  // voice nudges saved for that artist. The song reuses the same cached description.
+  useEffect(() => {
+    const reference = inspiration.trim();
+    if (!reference) {
+      setPreview({ state: "idle" });
+      return;
+    }
+    let alive = true;
+    const timer = setTimeout(async () => {
+      setPreview({ state: "loading", reference });
+      try {
+        const data = await describeArtist(reference);
+        if (!alive) return;
+        setPreview({ state: "ready", reference, data });
+        const saved = await loadTweaks(uid, data.key).catch(() => null);
+        if (alive) setTweaks(saved ?? NO_TWEAKS);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        if (alive) setPreview({ state: "error", reference, message });
+      }
+    }, 900);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [inspiration, uid]);
+
+  function nudge(name: keyof VoiceTweaks, value: number) {
+    const next = { ...tweaks, [name]: tweaks[name] === value ? 0 : value };
+    setTweaks(next);
+    if (preview.state === "ready") saveTweaks(uid, preview.data.key, next).catch(() => undefined);
+  }
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const station = stations.find((s) => s.id === stationId) ?? stations[0];
+  const sung = lyricsMode || (vocals ?? Boolean(station?.vocals));
 
   async function submit(req: SongRequest) {
     setBusy(true);
@@ -178,8 +231,17 @@ export function Composer({ uid }: Props) {
         <p className="hint muted">
           We turn this into a musical description (genre, era, singer, instruments, tempo,
           production) that leads the song. Your song is original: the artist&apos;s name, voice,
-          lyrics and songs are never used.
+          lyrics and songs are never used. Add a year for a period, e.g. &quot;Bob Dylan 1965&quot;.
         </p>
+        {preview.state === "loading" && <p className="hint muted">Describing the style…</p>}
+        {preview.state === "error" && (
+          <p className="hint error">Couldn&apos;t describe that style: {preview.message}</p>
+        )}
+        {preview.state === "ready" && (
+          <p className="preview" data-testid="artist-preview">
+            {preview.data.summary}
+          </p>
+        )}
       </div>
 
       <div className="field" hidden={lyricsMode}>
@@ -201,7 +263,7 @@ export function Composer({ uid }: Props) {
         </div>
       </div>
 
-      <div className="field" hidden={!lyricsMode && vocals === false}>
+      <div className="field" hidden={!sung}>
         <label>Singer</label>
         <div className="chips">
           {[
@@ -218,6 +280,37 @@ export function Composer({ uid }: Props) {
             </button>
           ))}
         </div>
+        {preview.state === "ready" && preview.data.voice && (
+          <p className="preview" data-testid="voice-preview">
+            Voice: {preview.data.voice}
+          </p>
+        )}
+        <label className="sub">
+          Adjust the voice{" "}
+          <span className="muted">
+            {preview.state === "ready" ? "(saved for this artist)" : "(optional)"}
+          </span>
+        </label>
+        <div className="chips small tweaks">
+          {TWEAKS.map((t) => (
+            <span key={t.name} className="pair">
+              <button
+                className={`chip ${tweaks[t.name] === -1 ? "on" : ""}`}
+                aria-pressed={tweaks[t.name] === -1}
+                onClick={() => nudge(t.name, -1)}
+              >
+                {t.down}
+              </button>
+              <button
+                className={`chip ${tweaks[t.name] === 1 ? "on" : ""}`}
+                aria-pressed={tweaks[t.name] === 1}
+                onClick={() => nudge(t.name, 1)}
+              >
+                {t.up}
+              </button>
+            </span>
+          ))}
+        </div>
       </div>
 
       <div className="actions">
@@ -232,6 +325,7 @@ export function Composer({ uid }: Props) {
               energy,
               vocals: lyricsMode ? true : vocals,
               singer,
+              voiceTweaks: tweaks,
               inspiration,
               lyrics: lyricsMode ? lyrics : null,
             })

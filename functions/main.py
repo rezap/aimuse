@@ -20,7 +20,7 @@ import json
 import os
 
 from firebase_admin import auth, firestore, initialize_app, storage
-from firebase_functions import firestore_fn, options
+from firebase_functions import firestore_fn, https_fn, options
 from firebase_functions.params import SecretParam
 
 GEMINI_API_KEY = SecretParam("GEMINI_API_KEY")
@@ -108,3 +108,26 @@ def on_job_created(event: firestore_fn.Event) -> None:
         is_allowed=_is_allowed,
         translator_factory=_translator,
     )
+
+
+@https_fn.on_call(secrets=[GEMINI_API_KEY], memory=options.MemoryOption.MB_512, max_instances=5)
+def describe_artist(req: https_fn.CallableRequest) -> dict:
+    """Preview what "In the spirit of <artist>" will mean (genre, era, singer, voice) before a
+    song is made. Uses the same cached description as the song, so what you see is what's sent."""
+    from aimuse.inspiration import InspirationError
+    from firebase_stores import FirestoreJobStore
+    from muse_jobs import describe_reference
+
+    Code = https_fn.FunctionsErrorCode
+    if req.auth is None:
+        raise https_fn.HttpsError(Code.UNAUTHENTICATED, "Sign in first.")
+    if not _is_allowed(req.auth.uid):
+        raise https_fn.HttpsError(Code.PERMISSION_DENIED, "This app is invite-only.")
+    reference = (req.data or {}).get("reference") if isinstance(req.data, dict) else None
+    if not isinstance(reference, str):
+        raise https_fn.HttpsError(Code.INVALID_ARGUMENT, "Missing reference.")
+    db, _ = _clients()
+    try:
+        return describe_reference(reference, FirestoreJobStore(db), _translator)
+    except InspirationError as e:
+        raise https_fn.HttpsError(Code.INVALID_ARGUMENT, str(e)) from e

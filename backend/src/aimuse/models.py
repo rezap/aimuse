@@ -105,6 +105,52 @@ SINGER_WORDS = {
 }
 
 
+class VoiceProfile(BaseModel):
+    """What makes a voice recognisable, in generic words: the same *kind* of voice, never a
+    particular person's. Each field is a short phrase; empty fields are left out."""
+
+    voice_type: str | None = None  # register and range, e.g. "baritone, narrow range"
+    texture: str | None = None  # e.g. "nasal, reedy, slightly raspy"
+    delivery: str | None = None  # e.g. "half-spoken, drawled, words crammed into lines"
+    pitch: str | None = None  # e.g. "loose, off-kilter pitch, no vibrato"
+    character: str | None = None  # e.g. "weathered, older-sounding, American folk twang"
+    recording: str | None = None  # e.g. "dry, close-miked, single take"
+    backing: str | None = None  # e.g. "solo voice, no harmonies"
+
+    def describe(self) -> str:
+        fields = (self.voice_type, self.texture, self.delivery, self.pitch, self.character)
+        parts = [f.strip() for f in fields if f and f.strip()]
+        for extra in (self.recording, self.backing):
+            if extra and extra.strip():
+                parts.append(extra.strip())
+        return "; ".join(parts)
+
+
+_TWEAK_WORDS = {
+    "pitch": ("sung low in the voice's range", "sung high in the voice's range"),
+    "grit": ("smoother, cleaner tone", "rougher, grittier tone"),
+    "spoken": ("fully sung, melodic phrasing", "more spoken, talk-sung phrasing"),
+    "space": ("dry, close and intimate", "drenched in reverb"),
+}
+
+
+class VoiceTweaks(BaseModel):
+    """The listener's nudges on top of a voice: -1, 0 or +1 each."""
+
+    pitch: int = Field(default=0, ge=-1, le=1)  # lower / higher
+    grit: int = Field(default=0, ge=-1, le=1)  # smoother / rougher
+    spoken: int = Field(default=0, ge=-1, le=1)  # more sung / more spoken
+    space: int = Field(default=0, ge=-1, le=1)  # drier / more reverb
+
+    def describe(self) -> str:
+        words = []
+        for name, (down, up) in _TWEAK_WORDS.items():
+            v = getattr(self, name)
+            if v:
+                words.append(up if v > 0 else down)
+        return ", ".join(words)
+
+
 class StyleTraits(BaseModel):
     """Musical traits of an artist/style the listener likes. Never contains names.
 
@@ -119,6 +165,7 @@ class StyleTraits(BaseModel):
     production: str | None = None
     singer: Singer | None = None
     vocal_delivery: str | None = None  # register, texture, phrasing; no gender (that's singer)
+    voice: VoiceProfile | None = None  # the detailed version of vocal_delivery
     lyric_style: str | None = None
     bpm_min: int | None = Field(default=None, ge=40, le=220)
     bpm_max: int | None = Field(default=None, ge=40, le=220)
@@ -129,6 +176,10 @@ class StyleTraits(BaseModel):
     def _known_singer(cls, v):
         # Text models occasionally answer outside the enum ("unknown", "group"); treat as unsaid.
         return v if v in {s.value for s in Singer} or isinstance(v, Singer) else None
+
+    def voice_text(self) -> str | None:
+        """The richest voice description available."""
+        return (self.voice.describe() if self.voice else "") or self.vocal_delivery
 
     def bpm(self) -> int | None:
         """Typical tempo for this style, or None if the model didn't say."""
@@ -164,6 +215,7 @@ class Intent(BaseModel):
     key: str | None = None
     vocals: Vocals | None = None
     singer: Singer | None = None  # the listener's choice; wins over the artist reference
+    voice_tweaks: VoiceTweaks | None = None
     duration_s: int | None = Field(default=None, ge=10, le=240)
     influences: StyleTraits | None = None
     lyrics: str | None = Field(default=None, max_length=3000)  # the listener's own words

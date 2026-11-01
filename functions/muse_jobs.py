@@ -19,10 +19,9 @@ from pydantic import BaseModel, Field, ValidationError
 
 from aimuse.engines import EngineError, MusicEngine
 from aimuse.inspiration import MAX_REFERENCE_CHARS, InspirationError
-from aimuse.models import Intent, Singer, StyleTraits, Vocals
-from aimuse.pipeline import Budget, generate_track, rank
+from aimuse.models import Intent, Singer, StyleTraits, Vocals, VoiceTweaks
 from aimuse.presets import load_style
-from aimuse.prompt import singer_for
+from aimuse.prompt import singer_for, voice_description
 
 MAX_THEME_CHARS = 200
 MAX_LYRICS_CHARS = 3000
@@ -49,6 +48,7 @@ class JobRequest(BaseModel):
     energy: float | None = Field(default=None, ge=0.0, le=1.0)
     vocals: bool | None = None
     singer: Literal["male", "female"] | None = None
+    voice_tweaks: VoiceTweaks | None = Field(default=None, alias="voiceTweaks")
     inspiration: str | None = Field(default=None, max_length=MAX_REFERENCE_CHARS)
     lyrics: str | None = Field(default=None, max_length=MAX_LYRICS_CHARS)
 
@@ -64,6 +64,7 @@ class JobRequest(BaseModel):
             energy=self.energy,
             vocals=vocals,
             singer=Singer(self.singer) if self.singer else None,
+            voice_tweaks=self.voice_tweaks,
             influences=influences,
             lyrics=self.lyrics if self.lyrics and self.lyrics.strip() else None,
         )
@@ -110,13 +111,19 @@ def display_bpm(measured: float | None, target: int) -> float | None:
     return round(min((measured * f for f in (0.5, 1.0, 2.0)), key=lambda b: abs(b - target)), 1)
 
 
-# Bump when StyleTraits gains fields, so cached descriptions are made again (v2: singer, tempo).
-INFLUENCE_VERSION = "v2"
+# Bump when StyleTraits gains fields, so cached descriptions are made again (v2: singer, tempo;
+# v3: detailed voice profile and era).
+INFLUENCE_VERSION = "v3"
+
+
+def reference_slug(reference: str) -> str:
+    """ "Bob  DYLAN" and "bob dylan" are the same reference."""
+    return re.sub(r"[^a-z0-9]+", "-", reference.lower()).strip("-")[:80]
 
 
 def influence_key(reference: str) -> str:
-    """Cache key for a reference: "Bob  DYLAN" and "bob dylan" share traits."""
-    slug = re.sub(r"[^a-z0-9]+", "-", reference.lower()).strip("-")[:80]
+    """Cache key for a reference's traits (versioned, see INFLUENCE_VERSION)."""
+    slug = reference_slug(reference)
     return f"{INFLUENCE_VERSION}-{slug}" if slug else ""
 
 
@@ -134,6 +141,25 @@ def resolve_influences(
     traits = translator_factory().translate(reference)
     store.save_influence(key, reference.strip(), traits.model_dump())
     return traits
+
+
+def describe_reference(
+    reference: str, store: JobStore, translator_factory: Callable[[], StyleTranslator]
+) -> dict:
+    """What an artist reference means, for the app to show before a song is made: the same
+    (cached) traits the song will use. `key` names the listener's saved voice adjustments."""
+    reference = reference.strip()
+    if not reference or len(reference) > MAX_REFERENCE_CHARS:
+        raise InspirationError("enter an artist or style of up to 80 characters")
+    traits = resolve_influences(reference, store, translator_factory)
+    singer = traits.singer if traits.singer and traits.singer != Singer.NONE else None
+    return {
+        "key": reference_slug(reference),
+        "summary": traits.summary(),
+        "era": traits.era,
+        "singer": singer.value if singer else None,
+        "voice": traits.voice_text(),
+    }
 
 
 def _title(req: JobRequest, station_name: str) -> str:
@@ -161,6 +187,9 @@ def process_job(
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> str:
     """Run one job. Returns the final status: "done", "failed" or "skipped"."""
+    # Imported here: the audio stack is slow to load and only song generation needs it.
+    from aimuse.pipeline import Budget, generate_track, rank
+
     job = store.claim_job(uid, job_id)
     if job is None:
         return "skipped"
@@ -240,6 +269,7 @@ def process_job(
                 "ownLyrics": bool(req.lyrics and req.lyrics.strip()),
                 "vocals": sung,
                 "singer": singer.value if singer else None,
+                "voice": voice_description(style, intent) if sung else None,
                 # False when vocals were asked for but the engine made an instrumental.
                 "vocalsDelivered": cand.vocals_ok,
                 "audioPath": path,
