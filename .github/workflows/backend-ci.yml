@@ -13,7 +13,7 @@ on:
         type: boolean
         default: false
       live_suite:
-        description: "Which live tests: clip (~$0.04), vocals (~$0.20), artist (~$0.16), lyrics (~$0.08), languages (~$0.24), all (~$0.72)"
+        description: "Which live tests: clip (~$0.04), vocals (~$0.20), artist (~$0.16), lyrics (~$0.08), languages (~$0.32), all (~$0.80)"
         type: choice
         options: [clip, vocals, artist, lyrics, languages, all]
         default: clip

@@ -254,21 +254,30 @@ def test_own_lyrics(case, text, must_work, tmp_path):
 # Languages: Spanish is documented by Google; Persian is not, so every way of getting it sung is
 # tried. Gemini (text) writes the Persian lyrics for the "written" and "romanized" cases. The
 # summary shows the script of the lyrics Lyria returns; listen to judge pronunciation.
-# About $0.24 per run (6 clips + 2 tiny text calls).
+# The "story" cases have Gemini write the lyrics from a longer text instead of a topic.
+# About $0.32 per run (8 clips + 4 tiny text calls).
+STORY = (
+    "Every Friday my father drove the night bus across the city. When I was small he took me "
+    "along once: the empty seats, the driver's radio playing softly, the bakery lights coming "
+    "on at four in the morning. He said the city was most honest when it was asleep. Years "
+    "later I still look for that bus when I can't sleep."
+)
 LANGUAGE_CASES = [
-    ("es-lyria", "es", "lyria", None),
-    ("es-written", "es", "written", None),
-    ("fa-lyria", "fa", "lyria", None),
-    ("fa-written", "fa", "written", None),
-    ("fa-romanized", "fa", "romanized", None),
-    ("es-en-duet", "es", "lyria", "en"),
+    ("es-lyria", "es", "lyria", None, None),
+    ("es-written", "es", "written", None, None),
+    ("fa-lyria", "fa", "lyria", None, None),
+    ("fa-written", "fa", "written", None, None),
+    ("fa-romanized", "fa", "romanized", None, None),
+    ("es-en-duet", "es", "lyria", "en", None),
+    ("en-story", "en", "written", None, STORY),
+    ("fa-story", "fa", "written", None, STORY),
 ]
 
 
 @pytest.mark.parametrize(
-    "case,language,mode,duet", LANGUAGE_CASES, ids=[c for c, _, _, _ in LANGUAGE_CASES]
+    "case,language,mode,duet,story", LANGUAGE_CASES, ids=[c[0] for c in LANGUAGE_CASES]
 )
-def test_languages(case, language, mode, duet, tmp_path):
+def test_languages(case, language, mode, duet, story, tmp_path):
     from aimuse.languages import LyricsMode, script_of
     from aimuse.lyrics_writer import GeminiLyricsWriter, prepare_lyrics
     from aimuse.models import Intent, Vocals
@@ -283,10 +292,12 @@ def test_languages(case, language, mode, duet, tmp_path):
         duration_s=30,
         language=language,
         duet_language=duet,
+        story=story,
     )
     prepared = prepare_lyrics(style, intent, LyricsMode(mode), GeminiLyricsWriter(key))
     if prepared.display:
-        (out / f"{case}.written.txt").write_text(prepared.display)
+        title = f"# {prepared.title}\n\n" if prepared.title else ""
+        (out / f"{case}.written.txt").write_text(title + prepared.display)
     engine = LyriaEngine(key, model="lyria-3-clip-preview")
     track = generate_track(
         engine,
@@ -307,6 +318,6 @@ def test_languages(case, language, mode, duet, tmp_path):
             verdict = "⚠️ came out instrumental"
         sent = script_of(prepared.intent.lyrics) if prepared.intent.lyrics else "–"
         f.write(f"| {case} | {verdict} | {sent} → {script_of(sung)} | {first} | `{cand.file}` |\n")
-    if language == "es":  # documented: must work
+    if language in ("es", "en"):  # documented: must work
         assert cand.error is None, cand.error
         assert cand.vocals_ok

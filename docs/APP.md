@@ -49,6 +49,11 @@
   app shows its genre line and voice. Lower/Higher, Smoother/Rougher, More sung/More spoken and
   Drier/More reverb nudge the voice; they are saved per artist in `users/{uid}/voices/{artist}`
   and come back next time. The song card shows the full voice that was asked for.
+- **What a song is made from**: *A topic* (a few words), *A story or text* (up to 6000
+  characters: a memory, letter, article…; Gemini retells it as original lyrics in the chosen
+  language and titles the song, without copying its sentences) or *My own lyrics* (sung as
+  written). A long or multi-line paste into the topic field moves to the story box, or to the
+  lyrics box when it reads like lyrics (several short lines).
 - **Languages ("Sung in")**: English (the stations' language), Spanish, French, German,
   Portuguese, Hindi, Japanese, Korean (Google's documented list) and Persian (experimental).
   The prompt names the language. Ways to get the words:
@@ -56,7 +61,7 @@
   | Mode | What happens |
   |---|---|
   | Lyria writes the lyrics | the prompt asks for original lyrics in the language |
-  | Gemini writes them | a text model (`AIMUSE_LYRICS_MODEL`) writes original lyrics in the language's script; Lyria sings them as given |
+  | Gemini writes them | a text model (`AIMUSE_LYRICS_MODEL`) writes original lyrics in the language's script; Lyria sings them as given. Available for English too, and the default for experimental languages |
   | Gemini writes, sung from Latin letters | the same, but Lyria gets a phonetic Latin-letter version (non-Latin scripts only); the app shows the original |
   | Own lyrics: sing as written / from Latin letters | your words, optionally transliterated by the text model |
   | Duet with an English singer | with "Lyria writes", a second singer answers in English |

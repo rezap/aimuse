@@ -44,6 +44,7 @@ export type Track = {
   writtenLyrics?: string | null;
   lyricsRomanized?: boolean;
   languageNote?: string | null;
+  fromStory?: boolean;
   vocalsDelivered?: boolean | null;
   inspiration?: string | null;
   influences?: string | null;

@@ -146,3 +146,41 @@ def test_firestore_rules_list_the_same_languages():
     rules = (Path(__file__).parents[2] / "firestore.rules").read_text()
     listed = rules.split("function validLanguage")[1].split("]")[0]
     assert sorted(c.strip(" '[\n") for c in listed.split("in [")[1].split(",")) == sorted(LANGUAGES)
+
+
+def test_gemini_writes_english_from_a_topic_too():
+    writer = FakeLyricsWriter()
+    prepared = prepare_lyrics(STYLE, Intent(theme="first snow"), LyricsMode.WRITTEN, writer)
+    assert writer.calls == ["write:en"] and prepared.intent.lyrics.startswith("[Verse 1]")
+    p = compile_prompt(STYLE, prepared.intent).text
+    assert "Sing the lyrics below exactly as written" in p  # English stays the default wording
+
+
+STORY = (
+    "My grandmother kept a tin of buttons on the windowsill. Every winter evening she let me "
+    "sort them by colour while the radio played, and she told me where each one came from."
+)
+
+
+def test_story_always_goes_through_the_lyrics_model():
+    writer = FakeLyricsWriter()
+    prepared = prepare_lyrics(STYLE, Intent(story=STORY), LyricsMode.LYRIA, writer)
+    assert writer.calls == ["write:en:story"] and prepared.mode == LyricsMode.WRITTEN
+    assert prepared.title == "A story in song" and prepared.intent.lyrics
+    fa = prepare_lyrics(STYLE, Intent(story=STORY, language="fa"), LyricsMode.ROMANIZED, writer)
+    assert writer.calls[-1] == "write:fa:story" and fa.intent.lyrics_romanized
+
+
+def test_gemini_writer_sends_the_story_and_returns_a_title():
+    seen = {}
+
+    def handler(request):
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json=_reply({"title": "Buttons", "lyrics": "[Verse 1]\nx"}))
+
+    writer = GeminiLyricsWriter("k", client=httpx.Client(transport=httpx.MockTransport(handler)))
+    out = writer.write(LANGUAGES["en"], "a song about the source text below", source=STORY)
+    assert out.title == "Buttons"
+    assert "tin of buttons" in seen["body"]["input"]
+    assert "do not copy its sentences" in seen["body"]["system_instruction"]
+    assert "title" in seen["body"]["response_format"]["schema"]["required"]

@@ -222,6 +222,7 @@ class Intent(BaseModel):
     language: str | None = None  # code from aimuse.languages, e.g. "es"; None = station's
     lyrics_romanized: bool = False  # `lyrics` are the language written in Latin letters
     duet_language: str | None = None  # a second singer answers in this language
+    story: str | None = Field(default=None, max_length=6000)  # text to write the lyrics from
 
     @field_validator("language", "duet_language")
     @classmethod

@@ -69,6 +69,8 @@ test("job requests are validated", async () => {
   await assertSucceeds(addDoc(jobs, job({ language: "fa", lyricsMode: "romanized", duetLanguage: "en" })));
   await assertFails(addDoc(jobs, job({ language: "xx" })));
   await assertFails(addDoc(jobs, job({ lyricsMode: "magic" })));
+  await assertSucceeds(addDoc(jobs, job({ story: "Once upon a time\n".repeat(300) })));
+  await assertFails(addDoc(jobs, job({ story: "x".repeat(6001) })));
   await assertFails(addDoc(jobs, job({ lyrics: "x".repeat(3001) })));
 });
 

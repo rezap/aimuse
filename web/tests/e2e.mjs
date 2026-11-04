@@ -51,7 +51,7 @@ try {
   await shot("2-library");
 
   // Second song from the listener's own lyrics.
-  await page.getByRole("button", { name: /Use my own lyrics/ }).click();
+  await page.getByRole("radio", { name: /My own lyrics/ }).click();
   await page.locator("#lyrics").fill("Paper boats on a silver stream\nCarry every little dream\n\nLet them sail into the light");
   await page.getByRole("button", { name: "Female", exact: true }).click();
   // The artist's voice is previewed before the song is made; nudge it and check it is saved.
@@ -78,7 +78,7 @@ try {
 
   // Third song in Persian: Gemini writes the lyrics, Lyria gets them in Latin letters.
   // On the instrumental Late Night Lo-fi station: picking a language must switch vocals on.
-  await page.getByRole("button", { name: "Use a topic instead" }).click();
+  await page.getByRole("radio", { name: "A topic" }).click();
   await page.getByRole("radio", { name: /Late Night Lo-fi/ }).click();
   await page.getByRole("button", { name: /Station default/ }).click();
   await page.locator("#language").selectOption("fa");
@@ -97,6 +97,26 @@ try {
   }
   await farsi.locator("summary", { hasText: "As sung (Latin letters)" }).waitFor({ timeout: 5000 });
   await shot("4-persian");
+
+  // Fourth song from a story: a long paste into the topic field switches to "A story or text",
+  // and Gemini writes the lyrics (still in Persian) and the title from it.
+  const story =
+    "My grandmother kept a tin of buttons on the windowsill. Every winter evening she let me sort them by colour while the radio played. ".repeat(4);
+  await page.locator("#theme").focus();
+  await page.evaluate((text) => {
+    const data = new DataTransfer();
+    data.setData("text/plain", text);
+    document.querySelector("#theme").dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  }, story);
+  await page.locator("#story").waitFor({ timeout: 5000 });
+  if ((await page.locator("#story").inputValue()) !== story) throw new Error("story not moved into the story box");
+  await page.getByRole("button", { name: "Make it" }).click();
+  const fromStory = page.locator("li.track", { hasText: "A story in song" });
+  await fromStory.waitFor({ timeout: 180000 });
+  if (!(await fromStory.innerText()).includes("lyrics by Gemini from your story")) {
+    throw new Error(`story mode not shown: ${JSON.stringify(await fromStory.innerText())}`);
+  }
+  await shot("5-story");
   console.log(`E2E OK: ${head.replace(/\n/g, " | ")}`);
 } catch (e) {
   await shot("failure");

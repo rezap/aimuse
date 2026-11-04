@@ -17,7 +17,7 @@ from typing import Protocol
 import httpx
 
 from .engines.lyria import API_URL
-from .languages import Language, LyricsMode, get_language
+from .languages import LANGUAGES, Language, LyricsMode, get_language
 from .models import Intent, StyleBible
 
 DEFAULT_MODEL = "gemini-3.8-flash"
@@ -31,6 +31,10 @@ Rules:
   section.
 - Entirely original: never quote or adapt existing songs or poems, and use no names of real
   people, artists or brands.
+- If a source text is given (a story, memory, letter, article...), base the song on it: its
+  events, images and feelings, retold as a song. Write new lines; do not copy its sentences
+  (a short phrase at most), and leave out private details such as full names and addresses.
+- Give the song a short title in the same language.
 - If romanization is requested, also give the same lyrics in Latin letters, line for line with
   the same tags, spelled so that a singer reading Latin letters pronounces the words correctly
   (a simple phonetic transliteration, not a translation).
@@ -45,10 +49,11 @@ phonetically so the words are pronounced correctly; do not translate, add or dro
 LYRICS_SCHEMA = {
     "type": "object",
     "properties": {
+        "title": {"type": "string"},
         "lyrics": {"type": "string"},
         "romanized": {"type": "string"},
     },
-    "required": ["lyrics"],
+    "required": ["title", "lyrics"],
 }
 ROMANIZED_SCHEMA = {
     "type": "object",
@@ -65,6 +70,7 @@ class LyricsError(RuntimeError):
 class WrittenLyrics:
     text: str  # in the language's own script
     romanized: str | None = None  # the same in Latin letters, when asked for
+    title: str | None = None
 
 
 class LyricsWriter(Protocol):
@@ -121,10 +127,14 @@ class GeminiLyricsWriter:
             raise LyricsError("lyrics model returned unusable output")
         return data
 
-    def write(self, language: Language, brief: str, *, romanize: bool = False) -> WrittenLyrics:
+    def write(
+        self, language: Language, brief: str, *, romanize: bool = False, source: str | None = None
+    ) -> WrittenLyrics:
         ask = f"Language: {language.name}.\nSong brief: {brief}"
         if romanize:
             ask += "\nAlso give the romanized version."
+        if source:
+            ask += f"\nSource text to base the song on:\n<<<\n{source}\n>>>"
         data = self._ask(WRITE_INSTRUCTION, ask, LYRICS_SCHEMA)
         text = (data.get("lyrics") or "").strip()
         if not text:
@@ -132,7 +142,8 @@ class GeminiLyricsWriter:
         romanized = (data.get("romanized") or "").strip() or None
         if romanize and not romanized:
             romanized = self.romanize(text, language)
-        return WrittenLyrics(text=text, romanized=romanized)
+        title = (data.get("title") or "").strip()[:80] or None
+        return WrittenLyrics(text=text, romanized=romanized, title=title)
 
     def romanize(self, text: str, language: Language) -> str:
         data = self._ask(
@@ -154,6 +165,7 @@ _FAKE = {
         "[Verse 1]\nLa lluvia cae despacio\nSobre el cristal\n\n[Chorus]\nQuédate conmigo",
         None,
     ),
+    "en": ("[Verse 1]\nThe kettle sings at half past six\n\n[Chorus]\nStay a while", None),
 }
 
 
@@ -163,10 +175,15 @@ class FakeLyricsWriter:
     def __init__(self):
         self.calls: list[str] = []
 
-    def write(self, language: Language, brief: str, *, romanize: bool = False) -> WrittenLyrics:
-        self.calls.append(f"write:{language.code}")
+    def write(
+        self, language: Language, brief: str, *, romanize: bool = False, source: str | None = None
+    ) -> WrittenLyrics:
+        self.calls.append(f"write:{language.code}" + (":story" if source else ""))
         text, roman = _FAKE.get(language.code, ("[Verse 1]\nla la la\n\n[Chorus]\nla la", None))
-        return WrittenLyrics(text=text, romanized=(roman or text) if romanize else None)
+        title = "A story in song" if source else None
+        return WrittenLyrics(
+            text=text, romanized=(roman or text) if romanize else None, title=title
+        )
 
     def romanize(self, text: str, language: Language) -> str:
         self.calls.append(f"romanize:{language.code}")
@@ -181,11 +198,14 @@ class PreparedLyrics:
         None  # lyrics to show the listener (original script), if the app made them
     )
     mode: LyricsMode = LyricsMode.LYRIA
+    title: str | None = None  # the lyrics model's title for the song, if it wrote them
 
 
 def lyrics_brief(style: StyleBible, intent: Intent) -> str:
     """What the song should be about, for the lyrics model."""
     theme = intent.theme or (style.lyric_themes[0] if style.lyric_themes else "a feeling")
+    if intent.story and not intent.theme:
+        theme = "the source text below"
     parts = [f"a {', '.join(style.genres)} song about {theme}"]
     if intent.mood:
         parts.append(f"mood: {intent.mood}")
@@ -198,12 +218,18 @@ def lyrics_brief(style: StyleBible, intent: Intent) -> str:
 def prepare_lyrics(
     style: StyleBible, intent: Intent, mode: LyricsMode | None, writer: LyricsWriter | None
 ) -> PreparedLyrics:
-    """Apply the lyrics mode: have the words written and/or romanized before Lyria sings."""
-    lang = get_language(intent.language)
+    """Apply the lyrics mode: have the words written and/or romanized before Lyria sings.
+
+    A story (or any longer text) always needs the lyrics model: Lyria can't turn pages of
+    prose into a song by itself. Without a language the song is in English.
+    """
+    lang = get_language(intent.language) or LANGUAGES["en"]
     mode = mode or LyricsMode.LYRIA
-    if mode == LyricsMode.ROMANIZED and lang and lang.latin:
+    if intent.story and not intent.lyrics and mode == LyricsMode.LYRIA:
+        mode = LyricsMode.WRITTEN
+    if mode == LyricsMode.ROMANIZED and lang.latin:
         mode = LyricsMode.WRITTEN  # already Latin letters: nothing to romanize
-    if lang is None or mode == LyricsMode.LYRIA:
+    if mode == LyricsMode.LYRIA:
         return PreparedLyrics(intent)
     if intent.lyrics and mode == LyricsMode.WRITTEN:
         return PreparedLyrics(intent)  # the listener wrote them: sing as written
@@ -215,11 +241,16 @@ def prepare_lyrics(
         sung = intent.model_copy(update={"lyrics": romanized[:3000], "lyrics_romanized": True})
         return PreparedLyrics(sung, display=intent.lyrics, mode=mode)
 
-    written = writer.write(lang, lyrics_brief(style, intent), romanize=mode == LyricsMode.ROMANIZED)
+    written = writer.write(
+        lang,
+        lyrics_brief(style, intent),
+        romanize=mode == LyricsMode.ROMANIZED,
+        source=intent.story,
+    )
     if mode == LyricsMode.ROMANIZED:
         sung = intent.model_copy(
             update={"lyrics": (written.romanized or "")[:3000], "lyrics_romanized": True}
         )
     else:
         sung = intent.model_copy(update={"lyrics": written.text[:3000]})
-    return PreparedLyrics(sung, display=written.text, mode=mode)
+    return PreparedLyrics(sung, display=written.text, mode=mode, title=written.title)

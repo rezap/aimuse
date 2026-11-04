@@ -27,6 +27,7 @@ from aimuse.prompt import compile_target, singer_for, voice_description
 
 MAX_THEME_CHARS = 200
 MAX_LYRICS_CHARS = 3000
+MAX_STORY_CHARS = 6000
 _REFUSAL_HINTS = ("safety", "block", "recitation", "copyright", "policy", "prohibit", "no audio")
 
 
@@ -53,6 +54,7 @@ class JobRequest(BaseModel):
     voice_tweaks: VoiceTweaks | None = Field(default=None, alias="voiceTweaks")
     inspiration: str | None = Field(default=None, max_length=MAX_REFERENCE_CHARS)
     lyrics: str | None = Field(default=None, max_length=MAX_LYRICS_CHARS)
+    story: str | None = Field(default=None, max_length=MAX_STORY_CHARS)
     language: str | None = None
     lyrics_mode: LyricsMode | None = Field(default=None, alias="lyricsMode")
     duet_language: str | None = Field(default=None, alias="duetLanguage")
@@ -81,6 +83,7 @@ class JobRequest(BaseModel):
             lyrics=self.lyrics if self.lyrics and self.lyrics.strip() else None,
             language=self.language,
             duet_language=self.duet_language,
+            story=self.story.strip() if self.story and self.story.strip() else None,
         )
 
 
@@ -238,13 +241,17 @@ def process_job(
 
         intent = req.to_intent(influences)
         lyrics_mode, written, language_note = LyricsMode.LYRIA, None, None
-        if req.language and compile_target(style, intent).vocals == Vocals.VOCALS:
+        written_title = None
+        wants_writer = req.language or intent.story or req.lyrics_mode not in (None, "lyria")
+        if wants_writer and compile_target(style, intent).vocals == Vocals.VOCALS:
             try:
                 writer = lyrics_writer_factory() if lyrics_writer_factory else None
                 prepared = prepare_lyrics(style, intent, req.lyrics_mode, writer)
                 intent, written, lyrics_mode = prepared.intent, prepared.display, prepared.mode
+                written_title = prepared.title
             except LyricsError as e:
-                # Still worth making: Lyria writes the lyrics in the language itself.
+                # Still worth making: Lyria writes the lyrics itself (in the language, about the
+                # topic; a story can't be passed on, so it is noted).
                 language_note = f"Lyria wrote the lyrics itself ({e})."
 
         engine = engine_factory()
@@ -290,7 +297,9 @@ def process_job(
                 "jobId": job_id,
                 "stationId": style.id,
                 "stationName": style.name,
-                "title": _title(req, style.name, written),
+                "title": written_title
+                if written_title and not (req.theme and req.theme.strip())
+                else _title(req, style.name, written),
                 "mood": req.mood,
                 "theme": req.theme,
                 "energy": req.energy,
@@ -315,11 +324,12 @@ def process_job(
                 "language": lang.code if lang else None,
                 "languageName": lang.name if lang else None,
                 "languageOfficial": lang.official if lang else None,
-                "lyricsMode": lyrics_mode.value if lang else None,
+                "lyricsMode": lyrics_mode.value if (lang or written) else None,
                 "duetLanguage": intent.duet_language if sung else None,
                 # The words the app had written or romanized, in their own script, for display.
                 "writtenLyrics": written,
                 "lyricsRomanized": intent.lyrics_romanized,
+                "fromStory": bool(req.story and req.story.strip()) and written is not None,
                 "languageNote": language_note,
                 "prompt": track.prompt_text,
                 "engine": track.engine,

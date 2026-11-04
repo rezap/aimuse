@@ -332,3 +332,28 @@ def test_instrumental_ignores_language():
     store = MemoryStore({"j1": _job(language="fa", lyricsMode="written", vocals=False)})
     assert _run(store, MemoryAudio(), writer=writer) == "done"
     assert writer.calls == [] and store.tracks["j1"]["writtenLyrics"] is None
+
+
+def test_story_job_writes_lyrics_from_the_text_and_titles_the_song():
+    from aimuse.lyrics_writer import FakeLyricsWriter
+
+    writer = FakeLyricsWriter()
+    story = "My grandmother kept a tin of buttons on the windowsill. " * 20
+    store = MemoryStore(
+        {
+            "en": _job(story=story, vocals=True),
+            "fa": _job(story=story, language="fa", lyricsMode="written", vocals=True),
+            "topic": _job(theme="first snow", lyricsMode="written", vocals=True),
+            "long": _job(story="x" * 6001),
+        }
+    )
+    for job_id in ("en", "fa", "topic"):
+        assert _run(store, MemoryAudio(), job_id=job_id, writer=writer) == "done"
+    assert _run(store, MemoryAudio(), job_id="long", writer=writer) == "failed"
+    t = store.tracks
+    assert t["en"]["title"] == "A story in song" and t["en"]["fromStory"] is True
+    assert t["en"]["lyricsMode"] == "written" and t["en"]["language"] is None
+    assert t["fa"]["fromStory"] and "باران" in t["fa"]["writtenLyrics"]
+    assert t["topic"]["title"] == "First snow" and t["topic"]["fromStory"] is False
+    assert "The kettle sings" in t["topic"]["prompt"]  # Gemini wrote English from the topic
+    assert writer.calls == ["write:en:story", "write:fa:story", "write:en"]
