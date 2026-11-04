@@ -75,6 +75,25 @@ try {
     throw new Error(`voice and nudge not used: ${JSON.stringify(boatsText)}`);
   }
   await shot("3-own-lyrics");
+
+  // Third song in Persian: Gemini writes the lyrics, Lyria gets them in Latin letters.
+  await page.getByRole("button", { name: "Use a topic instead" }).click();
+  await page.getByRole("radio", { name: /Rainy Morning Indie/ }).click();
+  await page.locator("#language").selectOption("fa");
+  await page.getByRole("radio", { name: "Gemini writes, sung from Latin letters" }).click();
+  await page.getByRole("button", { name: "Make it" }).click();
+  const farsi = page.locator("li.track", { hasText: "باران آرام می‌بارد" });
+  await farsi.waitFor({ timeout: 180000 });
+  const farsiText = await farsi.innerText();
+  if (!farsiText.includes("Persian (Farsi) (experimental)") || !farsiText.includes("sung from Latin letters")) {
+    throw new Error(`language not shown: ${JSON.stringify(farsiText)}`);
+  }
+  await farsi.locator("summary", { hasText: "Lyrics" }).click();
+  if ((await farsi.locator(".lyrics").first().getAttribute("dir")) !== "auto") {
+    throw new Error("lyrics are not laid out by text direction");
+  }
+  await farsi.locator("summary", { hasText: "As sung (Latin letters)" }).waitFor({ timeout: 5000 });
+  await shot("4-persian");
   console.log(`E2E OK: ${head.replace(/\n/g, " | ")}`);
 } catch (e) {
   await shot("failure");

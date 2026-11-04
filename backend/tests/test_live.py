@@ -249,3 +249,64 @@ def test_own_lyrics(case, text, must_work, tmp_path):
     if must_work:
         assert cand.error is None, cand.error
         assert cand.vocals_ok
+
+
+# Languages: Spanish is documented by Google; Persian is not, so every way of getting it sung is
+# tried. Gemini (text) writes the Persian lyrics for the "written" and "romanized" cases. The
+# summary shows the script of the lyrics Lyria returns; listen to judge pronunciation.
+# About $0.24 per run (6 clips + 2 tiny text calls).
+LANGUAGE_CASES = [
+    ("es-lyria", "es", "lyria", None),
+    ("es-written", "es", "written", None),
+    ("fa-lyria", "fa", "lyria", None),
+    ("fa-written", "fa", "written", None),
+    ("fa-romanized", "fa", "romanized", None),
+    ("es-en-duet", "es", "lyria", "en"),
+]
+
+
+@pytest.mark.parametrize(
+    "case,language,mode,duet", LANGUAGE_CASES, ids=[c for c, _, _, _ in LANGUAGE_CASES]
+)
+def test_languages(case, language, mode, duet, tmp_path):
+    from aimuse.languages import LyricsMode, script_of
+    from aimuse.lyrics_writer import GeminiLyricsWriter, prepare_lyrics
+    from aimuse.models import Intent, Vocals
+
+    out = Path(os.environ.get("AIMUSE_ARTIFACT_DIR") or tmp_path) / "languages"
+    out.mkdir(parents=True, exist_ok=True)
+    key = os.environ["GEMINI_API_KEY"]
+    style = load_style("rainy-morning-indie")
+    intent = Intent(
+        theme="rain on the window at night",
+        vocals=Vocals.VOCALS,
+        duration_s=30,
+        language=language,
+        duet_language=duet,
+    )
+    prepared = prepare_lyrics(style, intent, LyricsMode(mode), GeminiLyricsWriter(key))
+    if prepared.display:
+        (out / f"{case}.written.txt").write_text(prepared.display)
+    engine = LyriaEngine(key, model="lyria-3-clip-preview")
+    track = generate_track(
+        engine,
+        style,
+        prepared.intent,
+        name=case,
+        arm="languages",
+        out_dir=out,
+        budget=Budget(engine.price_per_request_usd),
+    )
+    write_recipe(track, style, out)
+    cand = track.candidates[0]
+    sung = (out / cand.lyrics_file).read_text() if cand.lyrics_file else ""
+    first = " / ".join(ln for ln in sung.strip().splitlines()[:3] if ln.strip()) or "(none)"
+    with (out / "languages-summary.md").open("a") as f:
+        verdict = "✅ made" if cand.error is None else f"❌ {cand.error[:160]}"
+        if cand.error is None and not cand.vocals_ok:
+            verdict = "⚠️ came out instrumental"
+        sent = script_of(prepared.intent.lyrics) if prepared.intent.lyrics else "–"
+        f.write(f"| {case} | {verdict} | {sent} → {script_of(sung)} | {first} | `{cand.file}` |\n")
+    if language == "es":  # documented: must work
+        assert cand.error is None, cand.error
+        assert cand.vocals_ok

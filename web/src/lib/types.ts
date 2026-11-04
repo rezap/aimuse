@@ -36,6 +36,14 @@ export type Track = {
   vocals: boolean;
   singer?: "male" | "female" | "duet" | null;
   voice?: string | null;
+  language?: string | null;
+  languageName?: string | null;
+  languageOfficial?: boolean | null;
+  lyricsMode?: "lyria" | "written" | "romanized" | null;
+  duetLanguage?: string | null;
+  writtenLyrics?: string | null;
+  lyricsRomanized?: boolean;
+  languageNote?: string | null;
   vocalsDelivered?: boolean | null;
   inspiration?: string | null;
   influences?: string | null;

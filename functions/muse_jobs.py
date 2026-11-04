@@ -15,13 +15,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Protocol
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from aimuse.engines import EngineError, MusicEngine
 from aimuse.inspiration import MAX_REFERENCE_CHARS, InspirationError
+from aimuse.languages import LANGUAGES, LyricsMode, get_language
+from aimuse.lyrics_writer import LyricsError, LyricsWriter, prepare_lyrics
 from aimuse.models import Intent, Singer, StyleTraits, Vocals, VoiceTweaks
 from aimuse.presets import load_style
-from aimuse.prompt import singer_for, voice_description
+from aimuse.prompt import compile_target, singer_for, voice_description
 
 MAX_THEME_CHARS = 200
 MAX_LYRICS_CHARS = 3000
@@ -51,6 +53,16 @@ class JobRequest(BaseModel):
     voice_tweaks: VoiceTweaks | None = Field(default=None, alias="voiceTweaks")
     inspiration: str | None = Field(default=None, max_length=MAX_REFERENCE_CHARS)
     lyrics: str | None = Field(default=None, max_length=MAX_LYRICS_CHARS)
+    language: str | None = None
+    lyrics_mode: LyricsMode | None = Field(default=None, alias="lyricsMode")
+    duet_language: str | None = Field(default=None, alias="duetLanguage")
+
+    @field_validator("language", "duet_language")
+    @classmethod
+    def _known_language(cls, v: str | None) -> str | None:
+        if v is not None and v not in LANGUAGES:
+            raise ValueError(f"unknown language {v!r}")
+        return v
 
     def to_intent(self, influences: StyleTraits | None = None) -> Intent:
         vocals = None
@@ -67,6 +79,8 @@ class JobRequest(BaseModel):
             voice_tweaks=self.voice_tweaks,
             influences=influences,
             lyrics=self.lyrics if self.lyrics and self.lyrics.strip() else None,
+            language=self.language,
+            duet_language=self.duet_language,
         )
 
 
@@ -162,8 +176,13 @@ def describe_reference(
     }
 
 
-def _title(req: JobRequest, station_name: str) -> str:
-    first_line = next((ln.strip() for ln in (req.lyrics or "").splitlines() if ln.strip()), "")
+def _first_lyric_line(text: str | None) -> str:
+    lines = (ln.strip() for ln in (text or "").splitlines())
+    return next((ln for ln in lines if ln and not ln.startswith("[")), "")
+
+
+def _title(req: JobRequest, station_name: str, written: str | None = None) -> str:
+    first_line = _first_lyric_line(req.lyrics or written)
     if first_line and not (req.theme and req.theme.strip()):
         return first_line[:60]
     if req.theme and req.theme.strip():
@@ -184,6 +203,7 @@ def process_job(
     daily_cap_usd: float,
     is_allowed: Callable[[str], bool] = lambda uid: True,
     translator_factory: Callable[[], StyleTranslator] | None = None,
+    lyrics_writer_factory: Callable[[], LyricsWriter] | None = None,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> str:
     """Run one job. Returns the final status: "done", "failed" or "skipped"."""
@@ -216,6 +236,17 @@ def process_job(
                 # Not worth failing the song over: make it without the artist influence.
                 inspiration_note = f"Made without the artist style ({e})."
 
+        intent = req.to_intent(influences)
+        lyrics_mode, written, language_note = LyricsMode.LYRIA, None, None
+        if req.language and compile_target(style, intent).vocals == Vocals.VOCALS:
+            try:
+                writer = lyrics_writer_factory() if lyrics_writer_factory else None
+                prepared = prepare_lyrics(style, intent, req.lyrics_mode, writer)
+                intent, written, lyrics_mode = prepared.intent, prepared.display, prepared.mode
+            except LyricsError as e:
+                # Still worth making: Lyria writes the lyrics in the language itself.
+                language_note = f"Lyria wrote the lyrics itself ({e})."
+
         engine = engine_factory()
         price = engine.price_per_request_usd
         if not store.reserve_spend(uid, now().strftime("%Y-%m-%d"), price, daily_cap_usd):
@@ -227,7 +258,7 @@ def process_job(
                 track = generate_track(
                     engine,
                     style,
-                    req.to_intent(influences),
+                    intent,
                     name=job_id,
                     arm="app",
                     out_dir=out,
@@ -249,7 +280,7 @@ def process_job(
             lyrics = (out / cand.lyrics_file).read_text() if cand.lyrics_file else None
 
         a = cand.analysis
-        intent = req.to_intent(influences)
+        lang = get_language(req.language)
         sung = track.target.vocals == Vocals.VOCALS
         singer = singer_for(intent) if sung else None
         store.complete_job(
@@ -259,7 +290,7 @@ def process_job(
                 "jobId": job_id,
                 "stationId": style.id,
                 "stationName": style.name,
-                "title": _title(req, style.name),
+                "title": _title(req, style.name, written),
                 "mood": req.mood,
                 "theme": req.theme,
                 "energy": req.energy,
@@ -281,6 +312,15 @@ def process_job(
                 "targetBpm": track.target.bpm,
                 "targetKey": track.target.key,
                 "lyrics": lyrics,
+                "language": lang.code if lang else None,
+                "languageName": lang.name if lang else None,
+                "languageOfficial": lang.official if lang else None,
+                "lyricsMode": lyrics_mode.value if lang else None,
+                "duetLanguage": intent.duet_language if sung else None,
+                # The words the app had written or romanized, in their own script, for display.
+                "writtenLyrics": written,
+                "lyricsRomanized": intent.lyrics_romanized,
+                "languageNote": language_note,
                 "prompt": track.prompt_text,
                 "engine": track.engine,
                 "model": track.model,

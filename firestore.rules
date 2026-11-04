@@ -21,9 +21,15 @@ service cloud.firestore {
         && (!('space' in t) || t.space in [-1, 0, 1]);
     }
 
+    // Keep in step with backend/src/aimuse/languages.py.
+    function validLanguage(v) {
+      return v in ['en', 'es', 'fr', 'de', 'pt', 'hi', 'ja', 'ko', 'fa'];
+    }
+
     function validJob(d) {
       return d.keys().hasOnly(['stationId', 'mood', 'theme', 'energy', 'vocals', 'singer',
-                               'voiceTweaks', 'inspiration', 'lyrics', 'status', 'createdAt'])
+                               'voiceTweaks', 'inspiration', 'lyrics', 'language', 'lyricsMode',
+                               'duetLanguage', 'status', 'createdAt'])
         && d.status == 'queued'
         && d.createdAt == request.time
         && d.stationId is string && d.stationId.size() > 0 && d.stationId.size() <= 64
@@ -33,6 +39,10 @@ service cloud.firestore {
             || (d.energy is number && d.energy >= 0 && d.energy <= 1))
         && (!('vocals' in d) || d.vocals == null || d.vocals is bool)
         && (!('singer' in d) || d.singer == null || d.singer in ['male', 'female'])
+        && (!('language' in d) || d.language == null || validLanguage(d.language))
+        && (!('duetLanguage' in d) || d.duetLanguage == null || validLanguage(d.duetLanguage))
+        && (!('lyricsMode' in d) || d.lyricsMode == null
+            || d.lyricsMode in ['lyria', 'written', 'romanized'])
         && (!('voiceTweaks' in d) || d.voiceTweaks == null || validTweaks(d.voiceTweaks))
         && (!('inspiration' in d) || d.inspiration == null
             || (d.inspiration is string && d.inspiration.size() <= 80))
