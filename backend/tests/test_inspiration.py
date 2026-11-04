@@ -10,7 +10,7 @@ from aimuse.inspiration import (
     mentions_reference,
     scrub,
 )
-from aimuse.models import Intent, Singer, StyleTraits, Vocals
+from aimuse.models import Intent, Singer, StyleTraits, Vocals, VoiceTweaks
 from aimuse.presets import load_style
 from aimuse.prompt import compile_prompt
 
@@ -35,6 +35,13 @@ GOOD = {
     "bpm_min": 90,
     "bpm_max": 120,
     "avoid": ["glossy pop production"],
+    "voice": {
+        "voice_type": "tenor, narrow range",
+        "texture": "nasal, reedy",
+        "delivery": "half-spoken, drawled",
+        "pitch": "loose, no vibrato",
+        "character": "young, wry",
+    },
 }
 
 
@@ -101,7 +108,7 @@ def test_prompt_with_influences_never_contains_the_name():
         load_style("sunset-synthpop"), Intent(vocals=Vocals.VOCALS, influences=traits)
     )
     assert "Genre: folk rock (1960s), blended with synthpop" in p.text
-    assert "harmonica" in p.text and "storytelling vocal" in p.text
+    assert "harmonica" in p.text and "storytelling phrasing" in p.text
     assert "do not imitate any specific artist" in p.text
     assert not mentions_reference(p.text, "Bob Dylan")
 
@@ -120,7 +127,11 @@ def test_artist_reference_drives_singer_tempo_production_and_instruments():
     lines = p.splitlines()
     assert lines[1].startswith("Genre: folk rock (1960s), blended with")
     assert "This is a song with a male lead singer and sung lyrics" in lines[2]
-    assert "Vocals: male lead singer; conversational, slightly rough storytelling vocal." in p
+    assert (
+        "Vocals: male lead singer; baritone, narrow range; nasal, reedy; half-spoken "
+        "storytelling phrasing; loose pitch, no vibrato; weathered, wry; dry, close-miked; "
+        "solo voice." in p
+    )
     assert style.vocal_style not in p
     assert "Tempo: 95 BPM." in p  # the artist's typical tempo, not the station's
     assert "Production: raw, live-in-the-room." in p
@@ -134,7 +145,8 @@ def test_listener_singer_choice_beats_the_artist():
     intent = Intent(vocals=Vocals.VOCALS, influences=traits, singer=Singer.FEMALE)
     p = compile_prompt(load_style("rainy-morning-indie"), intent).text
     assert "with a female lead singer" in p and "Avoid:" in p and "male vocals" in p
-    assert "Vocals: female lead singer;" in p
+    assert "Vocals: female lead singer; nasal, reedy;" in p
+    assert "baritone" not in p  # the artist's register doesn't fit the chosen voice
 
 
 def test_singer_without_artist_and_instrumental_ignores_singer():
@@ -143,3 +155,37 @@ def test_singer_without_artist_and_instrumental_ignores_singer():
     assert f"Vocals: male lead singer; {style.vocal_style}." in p
     p = compile_prompt(style, Intent(singer=Singer.MALE, vocals=Vocals.INSTRUMENTAL)).text
     assert "male" not in p and "Instrumental only" in p
+
+
+def test_voice_profile_is_parsed_scrubbed_and_era_requested():
+    seen = {}
+    leaky = {**GOOD, "voice": {**GOOD["voice"], "character": "young Dylan, wry"}}
+
+    def handler(request):
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json=_reply(leaky))
+
+    traits = _translator(handler).translate("Bob Dylan 1965")
+    schema = seen["body"]["response_format"]["schema"]
+    assert {"voice", "era"} <= set(schema["required"])
+    assert "names a period" in seen["body"]["system_instruction"]
+    assert traits.voice.voice_type == "tenor, narrow range"
+    assert traits.voice.character == "young, wry"  # the name was scrubbed
+    assert traits.voice_text().startswith("tenor, narrow range; nasal, reedy; half-spoken")
+
+
+def test_voice_without_profile_falls_back_to_delivery_phrase():
+    t = StyleTraits(genres=["folk"], vocal_delivery="gravelly croon")
+    assert t.voice_text() == "gravelly croon"
+
+
+def test_listener_voice_tweaks_are_added_to_the_voice():
+    traits = FakeStyleTranslator().translate("Bob Dylan")
+    tweaks = VoiceTweaks(pitch=-1, grit=1, spoken=0, space=-1)
+    intent = Intent(vocals=Vocals.VOCALS, influences=traits, voice_tweaks=tweaks)
+    p = compile_prompt(load_style("rainy-morning-indie"), intent).text
+    assert (
+        "solo voice; sung low in the voice's range, rougher, grittier tone, "
+        "dry, close and intimate." in p
+    )
+    assert VoiceTweaks().describe() == ""

@@ -11,9 +11,19 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == uid;
     }
 
+    // The listener's voice nudges: each of pitch/grit/spoken/space is -1, 0 or 1.
+    function validTweaks(t) {
+      return t is map
+        && t.keys().hasOnly(['pitch', 'grit', 'spoken', 'space'])
+        && (!('pitch' in t) || t.pitch in [-1, 0, 1])
+        && (!('grit' in t) || t.grit in [-1, 0, 1])
+        && (!('spoken' in t) || t.spoken in [-1, 0, 1])
+        && (!('space' in t) || t.space in [-1, 0, 1]);
+    }
+
     function validJob(d) {
       return d.keys().hasOnly(['stationId', 'mood', 'theme', 'energy', 'vocals', 'singer',
-                               'inspiration', 'lyrics', 'status', 'createdAt'])
+                               'voiceTweaks', 'inspiration', 'lyrics', 'status', 'createdAt'])
         && d.status == 'queued'
         && d.createdAt == request.time
         && d.stationId is string && d.stationId.size() > 0 && d.stationId.size() <= 64
@@ -23,6 +33,7 @@ service cloud.firestore {
             || (d.energy is number && d.energy >= 0 && d.energy <= 1))
         && (!('vocals' in d) || d.vocals == null || d.vocals is bool)
         && (!('singer' in d) || d.singer == null || d.singer in ['male', 'female'])
+        && (!('voiceTweaks' in d) || d.voiceTweaks == null || validTweaks(d.voiceTweaks))
         && (!('inspiration' in d) || d.inspiration == null
             || (d.inspiration is string && d.inspiration.size() <= 80))
         && (!('lyrics' in d) || d.lyrics == null
@@ -40,6 +51,15 @@ service cloud.firestore {
           && (resource.data.status in ['done', 'failed']
               || request.time > resource.data.createdAt + duration.value(15, 'm'));
         allow update: if false;
+      }
+
+      // Voice adjustments the listener saved for an artist ("bob-dylan"), reused next time.
+      match /voices/{artistKey} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && artistKey.size() <= 80
+          && request.resource.data.keys().hasOnly(['tweaks', 'updatedAt'])
+          && validTweaks(request.resource.data.tweaks)
+          && request.resource.data.updatedAt == request.time;
       }
 
       match /tracks/{trackId} {

@@ -63,6 +63,9 @@ test("job requests are validated", async () => {
   await assertSucceeds(addDoc(jobs, job({ lyrics: "line one\nline two" })));
   await assertSucceeds(addDoc(jobs, job({ singer: "female" })));
   await assertFails(addDoc(jobs, job({ singer: "robot" })));
+  await assertSucceeds(addDoc(jobs, job({ voiceTweaks: { pitch: -1, grit: 1, spoken: 0, space: 0 } })));
+  await assertFails(addDoc(jobs, job({ voiceTweaks: { grit: 2 } })));
+  await assertFails(addDoc(jobs, job({ voiceTweaks: { volume: 1 } })));
   await assertFails(addDoc(jobs, job({ lyrics: "x".repeat(3001) })));
 });
 
@@ -110,6 +113,18 @@ test("tracks: owner reads, rates and deletes; nothing else", async () => {
   await assertFails(getDoc(doc(bob, "users/alice")));
 
   await assertSucceeds(deleteDoc(t));
+});
+
+test("saved voices: owner only, valid nudges only", async () => {
+  const alice = env.authenticatedContext("alice").firestore();
+  const v = doc(alice, "users/alice/voices/bob-dylan");
+  await assertSucceeds(setDoc(v, { tweaks: { grit: 1, space: -1 }, updatedAt: serverTimestamp() }));
+  await assertSucceeds(getDoc(v));
+  await assertFails(setDoc(v, { tweaks: { grit: 3 }, updatedAt: serverTimestamp() }));
+  await assertFails(setDoc(v, { tweaks: {}, updatedAt: serverTimestamp(), extra: 1 }));
+  const bob = env.authenticatedContext("bob").firestore();
+  await assertFails(getDoc(doc(bob, "users/alice/voices/bob-dylan")));
+  await assertFails(setDoc(doc(bob, "users/alice/voices/x"), { tweaks: {}, updatedAt: serverTimestamp() }));
 });
 
 test("the artist-style cache is server-only", async () => {

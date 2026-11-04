@@ -81,6 +81,7 @@ function TrackCard({ uid, track }: { uid: string; track: Track }) {
             {track.inspirationNote ? ` · ${track.inspirationNote}` : ""}
           </p>
         )}
+        {track.voice && <p className="voice-line muted">Voice: {track.voice}</p>}
         {url ? <audio controls preload="none" src={url} /> : <p className="muted">Loading audio…</p>}
         <div className="track-actions">
           <button

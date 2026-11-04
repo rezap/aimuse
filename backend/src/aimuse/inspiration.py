@@ -16,7 +16,7 @@ import httpx
 from pydantic import ValidationError
 
 from .engines.lyria import API_URL
-from .models import Singer, StyleTraits
+from .models import Singer, StyleTraits, VoiceProfile
 
 DEFAULT_MODEL = "gemini-3.8-flash"
 MAX_REFERENCE_CHARS = 80
@@ -34,9 +34,19 @@ Rules:
 - singer: the voice type of the lead singer on most of their best-known recordings: "male",
   "female", "duet" (male and female leads) or "none" (instrumental act). For a style or genre
   rather than an artist, give the most typical voice type.
-- vocal_delivery: register, texture and phrasing in generic terms (e.g. "nasal, reedy tenor,
-  half-spoken phrasing"). Do not mention gender here, and never say it imitates or sounds like
-  any person.
+- era: if the user names a period (e.g. a year or "early", "late"), describe the artist as they
+  sounded then; otherwise describe their best-known period. Always say which period in era.
+- vocal_delivery: one short phrase summing up the voice (e.g. "nasal, reedy tenor, half-spoken
+  phrasing").
+- voice: the details that make the voice recognisable, each a short generic phrase:
+  voice_type (register and range, e.g. "baritone, narrow range"), texture (e.g. "nasal,
+  reedy, slightly raspy"), delivery (phrasing and rhythm, e.g. "half-spoken, drawled, behind
+  the beat"), pitch (intonation and vibrato, e.g. "loose pitch, no vibrato"), character (age,
+  attitude, broad regional flavour, e.g. "weathered, wry, American folk twang"), recording
+  (how the voice is recorded and processed, e.g. "dry, close-miked, double-tracked") and
+  backing (e.g. "solo voice, no harmonies").
+- In vocal_delivery and voice, never mention gender (that is singer), and never say the voice
+  imitates or sounds like any person.
 - bpm_min / bpm_max: the typical tempo range of their songs.
 - avoid: 1-3 sounds that would make a song clearly NOT in this style.
 - Keep each field short (a few words to one sentence).
@@ -52,12 +62,37 @@ TRAITS_SCHEMA = {
         "production": {"type": "string"},
         "singer": {"type": "string", "enum": ["male", "female", "duet", "none"]},
         "vocal_delivery": {"type": "string"},
+        "voice": {
+            "type": "object",
+            "properties": {
+                k: {"type": "string"}
+                for k in (
+                    "voice_type",
+                    "texture",
+                    "delivery",
+                    "pitch",
+                    "character",
+                    "recording",
+                    "backing",
+                )
+            },
+            "required": ["voice_type", "texture", "delivery", "pitch", "character"],
+        },
         "lyric_style": {"type": "string"},
         "bpm_min": {"type": "integer"},
         "bpm_max": {"type": "integer"},
         "avoid": {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["genres", "instrumentation", "singer", "vocal_delivery", "bpm_min", "bpm_max"],
+    "required": [
+        "genres",
+        "era",
+        "instrumentation",
+        "singer",
+        "vocal_delivery",
+        "voice",
+        "bpm_min",
+        "bpm_max",
+    ],
 }
 
 _STOPWORDS = {"the", "and", "band", "feat", "featuring", "with", "like", "style", "his", "her"}
@@ -82,7 +117,8 @@ def scrub(traits: StyleTraits, reference: str) -> StyleTraits:
     def clean(text: str | None) -> str | None:
         if text is None:
             return None
-        out = re.sub(r"\s{2,}", " ", pattern.sub("", text)).strip(" ,;:-'\"")
+        out = re.sub(r"\s{2,}", " ", pattern.sub("", text))
+        out = re.sub(r"\s+([,;:])", r"\1", out).strip(" ,;:-'\"")
         if all(w in _STOPWORDS for w in re.findall(r"[\w']+", out.lower())):
             return None  # nothing but filler left, e.g. "The" from "The Beatles"
         return out
@@ -94,6 +130,13 @@ def scrub(traits: StyleTraits, reference: str) -> StyleTraits:
             "instrumentation": [c for i in traits.instrumentation if (c := clean(i))],
             "production": clean(traits.production),
             "vocal_delivery": clean(traits.vocal_delivery),
+            "voice": (
+                traits.voice.model_copy(
+                    update={k: clean(v) for k, v in traits.voice.model_dump().items()}
+                )
+                if traits.voice
+                else None
+            ),
             "lyric_style": clean(traits.lyric_style),
             "avoid": [c for a in traits.avoid if (c := clean(a))],
         }
@@ -184,6 +227,15 @@ class FakeStyleTranslator:
             production="raw, live-in-the-room",
             singer=Singer.MALE,
             vocal_delivery="conversational, slightly rough storytelling vocal",
+            voice=VoiceProfile(
+                voice_type="baritone, narrow range",
+                texture="nasal, reedy",
+                delivery="half-spoken storytelling phrasing",
+                pitch="loose pitch, no vibrato",
+                character="weathered, wry",
+                recording="dry, close-miked",
+                backing="solo voice",
+            ),
             lyric_style="poetic, story-driven lyrics",
             bpm_min=80,
             bpm_max=110,

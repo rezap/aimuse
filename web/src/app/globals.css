@@ -103,3 +103,8 @@ summary { cursor: pointer; color: var(--muted); }
 .lyric-heading { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
 .hint { font-size: 0.8rem; margin: 6px 0 0; }
 .influence { font-size: 0.8rem; margin: 0 0 6px; }
+
+.preview { margin: 6px 0 0; font-size: 0.9rem; color: var(--text); border-left: 2px solid var(--accent-2); padding-left: 8px; }
+label.sub { display: block; margin-top: 10px; font-size: 0.9rem; }
+.tweaks .pair { display: inline-flex; gap: 4px; margin-right: 8px; }
+.voice-line { margin: 2px 0 6px; font-size: 0.85rem; }

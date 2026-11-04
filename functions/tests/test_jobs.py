@@ -173,7 +173,7 @@ def test_artist_inspiration_becomes_traits_never_the_name():
     assert t["influences"].startswith("folk rock")
     assert "harmonica" in t["prompt"] and not mentions_reference(t["prompt"], "Bob Dylan")
     # Translated once, then reused for the same artist (any spelling/case).
-    assert translator.calls == 1 and list(store.influences) == ["v2-bob-dylan"]
+    assert translator.calls == 1 and list(store.influences) == ["v3-bob-dylan"]
     # The artist's voice type carries through: "like Bob Dylan" is sung by a man.
     assert t["singer"] == "male" and "male lead singer" in t["influences"]
     assert "This is a song with a male lead singer" in t["prompt"]
@@ -248,3 +248,31 @@ def test_refusals_are_explained():
     store = MemoryStore({"j1": _job(lyrics="some famous words")})
     assert _run(store, MemoryAudio(), Refusing(cost_usd=0.08)) == "failed"
     assert store.jobs["j1"]["error"].startswith("Lyria declined to make this song")
+
+
+def test_describe_reference_previews_the_cached_traits_the_song_uses():
+    from aimuse.inspiration import FakeStyleTranslator, InspirationError
+    from muse_jobs import describe_reference
+
+    translator = FakeStyleTranslator()
+    store = MemoryStore({"j1": _job(inspiration="Bob Dylan", vocals=True)})
+    d = describe_reference(" Bob  DYLAN ", store, lambda: translator)
+    assert d["key"] == "bob-dylan" and d["singer"] == "male" and d["era"] == "1960s"
+    assert d["voice"].startswith("baritone, narrow range; nasal, reedy")
+    assert _run(store, MemoryAudio(), translator=translator) == "done"
+    assert translator.calls == 1  # the song reused the previewed description
+    assert d["voice"] in store.tracks["j1"]["voice"]
+    with pytest.raises(InspirationError):
+        describe_reference("x" * 81, store, lambda: translator)
+
+
+def test_voice_tweaks_reach_the_prompt_and_track():
+    tweaks = {"pitch": -1, "grit": 1, "spoken": 0, "space": 0}
+    store = MemoryStore(
+        {"j1": _job(voiceTweaks=tweaks, vocals=True), "j2": _job(voiceTweaks={"grit": 5})}
+    )
+    assert _run(store, MemoryAudio(), job_id="j1") == "done"
+    t = store.tracks["j1"]
+    assert "sung low in the voice's range, rougher, grittier tone" in t["voice"]
+    assert t["voice"] in t["prompt"]
+    assert _run(store, MemoryAudio(), job_id="j2") == "failed"
