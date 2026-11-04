@@ -28,7 +28,8 @@ service cloud.firestore {
 
     function validJob(d) {
       return d.keys().hasOnly(['stationId', 'mood', 'theme', 'energy', 'vocals', 'singer',
-                               'voiceTweaks', 'inspiration', 'lyrics', 'language', 'lyricsMode',
+                               'voiceTweaks', 'inspiration', 'lyrics', 'story', 'language',
+                               'lyricsMode',
                                'duetLanguage', 'status', 'createdAt'])
         && d.status == 'queued'
         && d.createdAt == request.time
@@ -47,7 +48,9 @@ service cloud.firestore {
         && (!('inspiration' in d) || d.inspiration == null
             || (d.inspiration is string && d.inspiration.size() <= 80))
         && (!('lyrics' in d) || d.lyrics == null
-            || (d.lyrics is string && d.lyrics.size() <= 3000));
+            || (d.lyrics is string && d.lyrics.size() <= 3000))
+        && (!('story' in d) || d.story == null
+            || (d.story is string && d.story.size() <= 6000));
     }
 
     match /users/{uid} {

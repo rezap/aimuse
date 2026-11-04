@@ -79,11 +79,12 @@ function TrackCard({ uid, track }: { uid: string; track: Track }) {
             {track.vocals && track.vocalsDelivered === false ? " · came out instrumental" : ""}
           </span>
         </div>
-        {track.vocals && track.languageName && (
+        {track.vocals && (track.languageName || track.lyricsMode) && (
           <p className="voice-line muted">
-            {track.languageName}
+            {track.languageName ?? "English"}
             {track.languageOfficial === false ? " (experimental)" : ""}
-            {duet ? ` + ${duet.name} duet` : ""} · {lyricsModeLabel(track.lyricsMode, !!track.ownLyrics)}
+            {duet ? ` + ${duet.name} duet` : ""} ·{" "}
+            {lyricsModeLabel(track.lyricsMode, !!track.ownLyrics, !!track.fromStory)}
             {track.languageNote ? ` · ${track.languageNote}` : ""}
           </p>
         )}

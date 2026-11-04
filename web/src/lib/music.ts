@@ -36,6 +36,7 @@ export type SongRequest = {
   duetLanguage?: LanguageCode | null;
   inspiration?: string | null;
   lyrics?: string | null;
+  story?: string | null;
 };
 
 /** Queue a song. The Cloud Function picks the job up and writes the track when it's ready. */
@@ -54,8 +55,8 @@ export async function requestSong(uid: string, req: SongRequest): Promise<string
       req.vocals !== false && req.voiceTweaks && hasTweaks(req.voiceTweaks) ? req.voiceTweaks : null,
     // English is the stations' own language, so it needs no setting.
     language: req.vocals !== false && req.language && req.language !== "en" ? req.language : null,
-    lyricsMode:
-      req.vocals !== false && req.language && req.language !== "en" ? (req.lyricsMode ?? null) : null,
+    lyricsMode: req.vocals !== false ? (req.lyricsMode ?? null) : null,
+    story: req.story?.trim() ? req.story.trim().slice(0, 6000) : null,
     duetLanguage: req.vocals !== false && req.language ? (req.duetLanguage ?? null) : null,
     status: "queued",
     createdAt: serverTimestamp(),
