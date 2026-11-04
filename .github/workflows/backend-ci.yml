@@ -13,9 +13,9 @@ on:
         type: boolean
         default: false
       live_suite:
-        description: "Which live tests: clip (~$0.04), vocals (~$0.20), artist (~$0.16), lyrics (~$0.08), all (~$0.48)"
+        description: "Which live tests: clip (~$0.04), vocals (~$0.20), artist (~$0.16), lyrics (~$0.08), languages (~$0.24), all (~$0.72)"
         type: choice
-        options: [clip, vocals, artist, lyrics, all]
+        options: [clip, vocals, artist, lyrics, languages, all]
         default: clip
       live_preset:
         description: Station used by the clip test
@@ -95,6 +95,7 @@ jobs:
             vocals) select=(-k test_vocals_requested_are_sung) ;;
             artist) select=(-k test_artist_style_is_described_not_named) ;;
             lyrics) select=(-k test_own_lyrics) ;;
+            languages) select=(-k test_languages) ;;
             all) select=() ;;
             *) select=(-k test_lyria_clip_through_app_pipeline) ;;
           esac
@@ -115,6 +116,13 @@ jobs:
             { echo "## Own lyrics check"; echo
               echo "| Case | Lyria | First sung lines | Audio |"
               echo "|---|---|---|---|"; cat "$l"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          g="$GITHUB_WORKSPACE/live-out/languages/languages-summary.md"
+          if [ -f "$g" ]; then
+            { echo "## Languages check"; echo
+              echo "Script: what was sent → what Lyria returned. Listen to the clips for pronunciation."; echo
+              echo "| Case | Lyria | Script | First sung lines | Audio |"
+              echo "|---|---|---|---|---|"; cat "$g"; } >> "$GITHUB_STEP_SUMMARY"
           fi
           a="$GITHUB_WORKSPACE/live-out/artist/artist-summary.md"
           if [ -f "$a" ]; then

@@ -66,6 +66,9 @@ test("job requests are validated", async () => {
   await assertSucceeds(addDoc(jobs, job({ voiceTweaks: { pitch: -1, grit: 1, spoken: 0, space: 0 } })));
   await assertFails(addDoc(jobs, job({ voiceTweaks: { grit: 2 } })));
   await assertFails(addDoc(jobs, job({ voiceTweaks: { volume: 1 } })));
+  await assertSucceeds(addDoc(jobs, job({ language: "fa", lyricsMode: "romanized", duetLanguage: "en" })));
+  await assertFails(addDoc(jobs, job({ language: "xx" })));
+  await assertFails(addDoc(jobs, job({ lyricsMode: "magic" })));
   await assertFails(addDoc(jobs, job({ lyrics: "x".repeat(3001) })));
 });
 

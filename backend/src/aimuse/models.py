@@ -218,7 +218,18 @@ class Intent(BaseModel):
     voice_tweaks: VoiceTweaks | None = None
     duration_s: int | None = Field(default=None, ge=10, le=240)
     influences: StyleTraits | None = None
-    lyrics: str | None = Field(default=None, max_length=3000)  # the listener's own words
+    lyrics: str | None = Field(default=None, max_length=3000)  # the words to sing, if given
+    language: str | None = None  # code from aimuse.languages, e.g. "es"; None = station's
+    lyrics_romanized: bool = False  # `lyrics` are the language written in Latin letters
+    duet_language: str | None = None  # a second singer answers in this language
+
+    @field_validator("language", "duet_language")
+    @classmethod
+    def _known_language(cls, v: str | None) -> str | None:
+        from .languages import get_language
+
+        get_language(v)  # raises ValueError for an unknown code
+        return v
 
     @field_validator("key")
     @classmethod

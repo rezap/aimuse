@@ -49,6 +49,21 @@
   app shows its genre line and voice. Lower/Higher, Smoother/Rougher, More sung/More spoken and
   Drier/More reverb nudge the voice; they are saved per artist in `users/{uid}/voices/{artist}`
   and come back next time. The song card shows the full voice that was asked for.
+- **Languages ("Sung in")**: English (the stations' language), Spanish, French, German,
+  Portuguese, Hindi, Japanese, Korean (Google's documented list) and Persian (experimental).
+  The prompt names the language. Ways to get the words:
+
+  | Mode | What happens |
+  |---|---|
+  | Lyria writes the lyrics | the prompt asks for original lyrics in the language |
+  | Gemini writes them | a text model (`AIMUSE_LYRICS_MODEL`) writes original lyrics in the language's script; Lyria sings them as given |
+  | Gemini writes, sung from Latin letters | the same, but Lyria gets a phonetic Latin-letter version (non-Latin scripts only); the app shows the original |
+  | Own lyrics: sing as written / from Latin letters | your words, optionally transliterated by the text model |
+  | Duet with an English singer | with "Lyria writes", a second singer answers in English |
+
+  If the text model fails, Lyria writes the lyrics itself and the song says so. Lyrics and
+  titles are laid out by text direction, so Persian reads right to left. Paid check:
+  Backend CI → `live_suite=languages`.
 - **Own lyrics**: "✍️ Use my own lyrics" (or pasting multi-line text into the topic field)
   sends up to 3000 characters. They go to Lyria under a `Lyrics:` header with `[Verse n]`
   tags (the listener's own tags are kept), always sung, and the song length follows the

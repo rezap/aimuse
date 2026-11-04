@@ -11,6 +11,7 @@ import {
   type Singer,
   type SongRequest,
 } from "@/lib/music";
+import { languageByCode, LANGUAGES, type LanguageCode, type LyricsMode } from "@/lib/languages";
 import {
   type ArtistPreview,
   describeArtist,
@@ -44,6 +45,9 @@ export function Composer({ uid }: Props) {
   const [vocals, setVocals] = useState<boolean | null>(null);
   const [singer, setSinger] = useState<Singer | null>(null);
   const [tweaks, setTweaks] = useState<VoiceTweaks>(NO_TWEAKS);
+  const [language, setLanguage] = useState<LanguageCode>("en");
+  const [lyricsSource, setLyricsSource] = useState<LyricsMode>("lyria");
+  const [duetEnglish, setDuetEnglish] = useState(false);
   const [preview, setPreview] = useState<Preview>({ state: "idle" });
 
   // Preview what the artist reference means (a moment after typing stops), and bring back the
@@ -85,6 +89,23 @@ export function Composer({ uid }: Props) {
 
   const station = stations.find((s) => s.id === stationId) ?? stations[0];
   const sung = lyricsMode || (vocals ?? Boolean(station?.vocals));
+  const lang = languageByCode(language);
+  // How the words are made. Own lyrics can only be sung as written or from Latin letters.
+  const lyricsOptions: { v: LyricsMode; label: string }[] = lyricsMode
+    ? [
+        { v: "written", label: "Sing as written" },
+        ...(lang?.latin ? [] : [{ v: "romanized" as const, label: "Sing from Latin letters" }]),
+      ]
+    : [
+        { v: "lyria", label: "Lyria writes the lyrics" },
+        { v: "written", label: "Gemini writes them" },
+        ...(lang?.latin
+          ? []
+          : [{ v: "romanized" as const, label: "Gemini writes, sung from Latin letters" }]),
+      ];
+  const source = lyricsOptions.some((o) => o.v === lyricsSource)
+    ? lyricsSource
+    : lyricsOptions[0].v;
 
   async function submit(req: SongRequest) {
     setBusy(true);
@@ -195,6 +216,7 @@ export function Composer({ uid }: Props) {
             </label>
             <textarea
               id="lyrics"
+              dir="auto"
               rows={10}
               maxLength={MAX_LYRICS}
               placeholder={"[Verse]\nWrite your own words here…\n\n[Chorus]\n…"}
@@ -264,6 +286,59 @@ export function Composer({ uid }: Props) {
       </div>
 
       <div className="field" hidden={!sung}>
+        <label htmlFor="language">Sung in</label>
+        <select
+          id="language"
+          value={language}
+          onChange={(e) => {
+            setLanguage(e.target.value as LanguageCode);
+            setLyricsSource(lyricsMode ? "written" : "lyria");
+          }}
+        >
+          {LANGUAGES.map((l) => (
+            <option key={l.code} value={l.code}>
+              {l.name}
+              {l.official ? "" : " (experimental)"}
+            </option>
+          ))}
+        </select>
+        {lang && lang.code !== "en" && (
+          <>
+            {!lang.official && (
+              <p className="hint muted">
+                Lyria doesn&apos;t officially sing {lang.name} yet. Try each way below and keep
+                what sounds right.
+              </p>
+            )}
+            <div className="chips small" role="radiogroup" aria-label="Lyrics">
+              {lyricsOptions.map((o) => (
+                <button
+                  key={o.v}
+                  role="radio"
+                  aria-checked={source === o.v}
+                  className={`chip ${source === o.v ? "on" : ""}`}
+                  onClick={() => setLyricsSource(o.v)}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            {!lyricsMode && source === "lyria" && (
+              <div className="chips small">
+                <button
+                  className={`chip ${duetEnglish ? "on" : ""}`}
+                  aria-pressed={duetEnglish}
+                  onClick={() => setDuetEnglish(!duetEnglish)}
+                >
+                  Duet with an English singer
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="field" hidden={!sung}>
         <label>Singer</label>
         <div className="chips">
           {[
@@ -326,6 +401,9 @@ export function Composer({ uid }: Props) {
               vocals: lyricsMode ? true : vocals,
               singer,
               voiceTweaks: tweaks,
+              language,
+              lyricsMode: source,
+              duetLanguage: !lyricsMode && source === "lyria" && duetEnglish ? "en" : null,
               inspiration,
               lyrics: lyricsMode ? lyrics : null,
             })

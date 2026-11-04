@@ -9,6 +9,8 @@ Settings (functions/.env, or the environment):
   AIMUSE_DAILY_USD  per-user daily spending cap, default 1.00
   AIMUSE_STYLE_MODEL  text model that turns "like <artist>" into musical traits,
                     default gemini-3.8-flash
+  AIMUSE_LYRICS_MODEL  text model that writes/romanizes lyrics in other languages,
+                    default gemini-3.8-flash
   AIMUSE_ALLOWED_EMAILS  comma-separated emails allowed to make songs (invite-only).
                     Empty = nobody, "*" = anyone signed in.
 Secret: GEMINI_API_KEY (`firebase functions:secrets:set GEMINI_API_KEY`).
@@ -76,6 +78,16 @@ def _translator():
     )
 
 
+def _lyrics_writer():
+    from aimuse.lyrics_writer import FakeLyricsWriter, GeminiLyricsWriter
+
+    if os.environ.get("AIMUSE_ENGINE", "lyria") == "fake":
+        return FakeLyricsWriter()
+    return GeminiLyricsWriter(
+        GEMINI_API_KEY.value, model=os.environ.get("AIMUSE_LYRICS_MODEL", "gemini-3.8-flash")
+    )
+
+
 def _engine():
     from aimuse.engines import FakeEngine, LyriaEngine
 
@@ -107,6 +119,7 @@ def on_job_created(event: firestore_fn.Event) -> None:
         daily_cap_usd=float(os.environ.get("AIMUSE_DAILY_USD", "1.00")),
         is_allowed=_is_allowed,
         translator_factory=_translator,
+        lyrics_writer_factory=_lyrics_writer,
     )
 
 

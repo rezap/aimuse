@@ -5,7 +5,8 @@ import { deleteObject, getDownloadURL, ref } from "firebase/storage";
 import { useEffect, useState } from "react";
 
 import { db, storage } from "@/lib/firebase";
-import { formatLyrics } from "@/lib/lyrics";
+import { languageByCode, lyricsModeLabel } from "@/lib/languages";
+import { formatLyrics, type LyricSection } from "@/lib/lyrics";
 import { formatDuration, gradient, stations } from "@/lib/music";
 import type { Track } from "@/lib/types";
 
@@ -59,13 +60,17 @@ function TrackCard({ uid, track }: { uid: string; track: Track }) {
   }
 
   const ext = track.mimeType === "audio/wav" ? "wav" : "mp3";
-  const lyrics = formatLyrics(track.lyrics);
+  // When the app had the words written (or romanized) they're shown in their own script; what
+  // Lyria returned (maybe Latin letters) is kept as "as sung".
+  const lyrics = formatLyrics(track.writtenLyrics || track.lyrics);
+  const asSung = track.writtenLyrics && track.lyricsRomanized ? formatLyrics(track.lyrics) : [];
+  const duet = languageByCode(track.duetLanguage);
   return (
     <li className="track">
       <div className="art" style={{ backgroundImage: gradient(palette) }} aria-hidden />
       <div className="grow">
         <div className="track-head">
-          <strong>{track.title}</strong>
+          <strong dir="auto">{track.title}</strong>
           <span className="muted">
             {track.stationName} · {formatDuration(track.durationS)}
             {track.bpm ? ` · ${Math.round(track.bpm)} BPM` : ""}
@@ -74,6 +79,14 @@ function TrackCard({ uid, track }: { uid: string; track: Track }) {
             {track.vocals && track.vocalsDelivered === false ? " · came out instrumental" : ""}
           </span>
         </div>
+        {track.vocals && track.languageName && (
+          <p className="voice-line muted">
+            {track.languageName}
+            {track.languageOfficial === false ? " (experimental)" : ""}
+            {duet ? ` + ${duet.name} duet` : ""} · {lyricsModeLabel(track.lyricsMode, !!track.ownLyrics)}
+            {track.languageNote ? ` · ${track.languageNote}` : ""}
+          </p>
+        )}
         {track.inspiration && (
           <p className="influence muted">
             In the spirit of {track.inspiration}
@@ -112,21 +125,34 @@ function TrackCard({ uid, track }: { uid: string; track: Track }) {
         {lyrics.length > 0 && (
           <details>
             <summary>Lyrics</summary>
-            <div className="lyrics">
-              {lyrics.map((section, i) => (
-                <p key={i}>
-                  {section.heading && <span className="lyric-heading">{section.heading}</span>}
-                  {section.lines.map((line, j) => (
-                    <span key={j} className="lyric-line">
-                      {line}
-                    </span>
-                  ))}
-                </p>
-              ))}
-            </div>
+            <LyricsText sections={lyrics} />
+          </details>
+        )}
+        {asSung.length > 0 && (
+          <details>
+            <summary>As sung (Latin letters)</summary>
+            <LyricsText sections={asSung} />
           </details>
         )}
       </div>
     </li>
+  );
+}
+
+function LyricsText({ sections }: { sections: LyricSection[] }) {
+  // dir="auto": Persian and other right-to-left lyrics read right to left.
+  return (
+    <div className="lyrics" dir="auto">
+      {sections.map((section, i) => (
+        <p key={i} dir="auto">
+          {section.heading && <span className="lyric-heading">{section.heading}</span>}
+          {section.lines.map((line, j) => (
+            <span key={j} className="lyric-line" dir="auto">
+              {line}
+            </span>
+          ))}
+        </p>
+      ))}
+    </div>
   );
 }

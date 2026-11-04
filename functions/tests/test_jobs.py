@@ -50,7 +50,9 @@ class MemoryAudio:
         self.files[path] = (data, content_type)
 
 
-def _run(store, audio, engine=None, cap=1.0, job_id="j1", allowed=True, translator=None):
+def _run(
+    store, audio, engine=None, cap=1.0, job_id="j1", allowed=True, translator=None, writer=None
+):
     return process_job(
         "u1",
         job_id,
@@ -60,6 +62,7 @@ def _run(store, audio, engine=None, cap=1.0, job_id="j1", allowed=True, translat
         daily_cap_usd=cap,
         is_allowed=lambda uid: allowed,
         translator_factory=(lambda: translator) if translator else None,
+        lyrics_writer_factory=(lambda: writer) if writer else None,
     )
 
 
@@ -276,3 +279,56 @@ def test_voice_tweaks_reach_the_prompt_and_track():
     assert "sung low in the voice's range, rougher, grittier tone" in t["voice"]
     assert t["voice"] in t["prompt"]
     assert _run(store, MemoryAudio(), job_id="j2") == "failed"
+
+
+def test_language_modes():
+    from aimuse.languages import script_of
+    from aimuse.lyrics_writer import FakeLyricsWriter
+
+    writer = FakeLyricsWriter()
+    store = MemoryStore(
+        {
+            "lyria": _job(language="fa", lyricsMode="lyria", vocals=True),
+            "written": _job(language="fa", lyricsMode="written", vocals=True),
+            "roman": _job(language="fa", lyricsMode="romanized", vocals=True),
+            "duet": _job(language="es", duetLanguage="en", vocals=True),
+            "bad": _job(language="xx"),
+        }
+    )
+    for job_id in ("lyria", "written", "roman", "duet"):
+        assert _run(store, MemoryAudio(), job_id=job_id, writer=writer) == "done"
+    assert _run(store, MemoryAudio(), job_id="bad", writer=writer) == "failed"
+    t = store.tracks
+    assert t["lyria"]["writtenLyrics"] is None and "in Persian (Farsi)" in t["lyria"]["prompt"]
+    assert t["lyria"]["languageOfficial"] is False and t["lyria"]["lyricsMode"] == "lyria"
+    assert script_of(t["written"]["writtenLyrics"]) == "Persian/Arabic"
+    assert t["written"]["title"] == "باران آرام می‌بارد"  # first lyric line, tags skipped
+    assert "Lyrics:\n[Verse 1]\nباران" in t["written"]["prompt"]
+    assert t["roman"]["lyricsRomanized"] and "baaraan" in t["roman"]["prompt"]
+    assert script_of(t["roman"]["writtenLyrics"]) == "Persian/Arabic"
+    assert "second singer answers in English" in t["duet"]["prompt"]
+    assert t["duet"]["duetLanguage"] == "en" and t["duet"]["languageName"] == "Spanish"
+    assert writer.calls == ["write:fa", "write:fa"]
+
+
+def test_lyrics_writer_failure_falls_back_to_lyria():
+    from aimuse.lyrics_writer import FakeLyricsWriter, LyricsError
+
+    class Broken(FakeLyricsWriter):
+        def write(self, *a, **k):
+            raise LyricsError("lyrics model error 503")
+
+    store = MemoryStore({"j1": _job(language="fa", lyricsMode="written", vocals=True)})
+    assert _run(store, MemoryAudio(), writer=Broken()) == "done"
+    t = store.tracks["j1"]
+    assert "503" in t["languageNote"] and t["lyricsMode"] == "lyria"
+    assert "The lyrics are original, in Persian (Farsi)" in t["prompt"]
+
+
+def test_instrumental_ignores_language():
+    from aimuse.lyrics_writer import FakeLyricsWriter
+
+    writer = FakeLyricsWriter()
+    store = MemoryStore({"j1": _job(language="fa", lyricsMode="written", vocals=False)})
+    assert _run(store, MemoryAudio(), writer=writer) == "done"
+    assert writer.calls == [] and store.tracks["j1"]["writtenLyrics"] is None

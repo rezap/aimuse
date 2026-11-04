@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 from .anchor import anchor_image_png
+from .languages import get_language
 from .models import (
     SINGER_WORDS,
     EnginePrompt,
@@ -168,6 +169,12 @@ def compile_prompt(
     inf = intent.influences
     own_lyrics = format_user_lyrics(intent.lyrics)[0] if intent.lyrics else ""
 
+    lang = get_language(intent.language)
+    lang_name = lang.name if lang else style.lyric_language
+    duet = get_language(intent.duet_language) if sung else None
+    if duet and duet.name == lang_name:
+        duet = None
+
     lines = [style.description.strip()]
     if inf and not inf.is_empty():
         # The listener's artist reference, already translated into name-free traits. It leads:
@@ -183,7 +190,16 @@ def compile_prompt(
         # Say it early and plainly: station descriptions can read as instrumental, and the
         # singer's voice type is what listeners notice first.
         who = f"a {SINGER_WORDS[singer]}" if singer else "a lead singer"
-        lines.append(f"This is a song with {who} and sung lyrics, not an instrumental.")
+        if duet:
+            lines.append(
+                f"This is a vocal duet with sung lyrics, not an instrumental: {who} sings in "
+                f"{lang_name} and a second singer answers in {duet.name}."
+            )
+        else:
+            sung_in = f" in {lang_name}" if lang else ""
+            lines.append(
+                f"This is a song with {who} and sung lyrics{sung_in}, not an instrumental."
+            )
     if moods:
         lines.append(f"Mood: {', '.join(moods)}.")
     if intent.energy is not None:
@@ -203,13 +219,22 @@ def compile_prompt(
         theme = intent.theme or (style.lyric_themes[0] if style.lyric_themes else None)
         voice = voice_description(style, intent)
         lines.append(f"Vocals: {voice}.")
-        if own_lyrics:
+        if own_lyrics and intent.lyrics_romanized:
             lines.append(
-                "Sing the lyrics below exactly as written, in order. Do not add or change words."
+                f"The lyrics below are {lang_name} written in Latin letters. Sing them in "
+                f"{lang_name} with natural {lang_name} pronunciation, exactly as written, in "
+                "order. Do not translate them or add words."
+            )
+        elif own_lyrics:
+            in_lang = f" in {lang_name}" if lang else ""
+            lines.append(
+                f"Sing the lyrics below{in_lang} exactly as written, in order. "
+                "Do not add or change words."
             )
         else:
             about = f" and describe {theme}" if theme else ""
-            lines.append(f"The lyrics are original, in {style.lyric_language}{about}.")
+            both = f" and {duet.name}" if duet else ""
+            lines.append(f"The lyrics are original, in {lang_name}{both}{about}.")
         if inf and inf.lyric_style and not own_lyrics:
             lines.append(f"Lyric style: {inf.lyric_style}.")
     else:

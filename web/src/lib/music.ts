@@ -3,6 +3,7 @@ import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "./firebase";
 import stationsJson from "./stations.json";
 import type { Station } from "./types";
+import type { LanguageCode, LyricsMode } from "./languages";
 import { hasTweaks, type VoiceTweaks } from "./voice";
 
 export const stations = stationsJson as Station[];
@@ -30,6 +31,9 @@ export type SongRequest = {
   vocals: boolean | null;
   singer?: Singer | null;
   voiceTweaks?: VoiceTweaks | null;
+  language?: LanguageCode | null;
+  lyricsMode?: LyricsMode | null;
+  duetLanguage?: LanguageCode | null;
   inspiration?: string | null;
   lyrics?: string | null;
 };
@@ -48,6 +52,11 @@ export async function requestSong(uid: string, req: SongRequest): Promise<string
     singer: req.vocals === false ? null : (req.singer ?? null),
     voiceTweaks:
       req.vocals !== false && req.voiceTweaks && hasTweaks(req.voiceTweaks) ? req.voiceTweaks : null,
+    // English is the stations' own language, so it needs no setting.
+    language: req.vocals !== false && req.language && req.language !== "en" ? req.language : null,
+    lyricsMode:
+      req.vocals !== false && req.language && req.language !== "en" ? (req.lyricsMode ?? null) : null,
+    duetLanguage: req.vocals !== false && req.language ? (req.duetLanguage ?? null) : null,
     status: "queued",
     createdAt: serverTimestamp(),
   });
