@@ -285,14 +285,17 @@ export function Composer({ uid }: Props) {
         </div>
       </div>
 
-      <div className="field" hidden={!sung}>
+      {/* Shown even on instrumental stations: choosing a language means the song is sung. */}
+      <div className="field" hidden={!lyricsMode && vocals === false}>
         <label htmlFor="language">Sung in</label>
         <select
           id="language"
           value={language}
           onChange={(e) => {
-            setLanguage(e.target.value as LanguageCode);
+            const next = e.target.value as LanguageCode;
+            setLanguage(next);
             setLyricsSource(lyricsMode ? "written" : "lyria");
+            if (next !== "en" && !sung) setVocals(true);
           }}
         >
           {LANGUAGES.map((l) => (

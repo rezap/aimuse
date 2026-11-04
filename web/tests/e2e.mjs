@@ -77,9 +77,12 @@ try {
   await shot("3-own-lyrics");
 
   // Third song in Persian: Gemini writes the lyrics, Lyria gets them in Latin letters.
+  // On the instrumental Late Night Lo-fi station: picking a language must switch vocals on.
   await page.getByRole("button", { name: "Use a topic instead" }).click();
-  await page.getByRole("radio", { name: /Rainy Morning Indie/ }).click();
+  await page.getByRole("radio", { name: /Late Night Lo-fi/ }).click();
+  await page.getByRole("button", { name: /Station default/ }).click();
   await page.locator("#language").selectOption("fa");
+  await page.locator('button.chip.on', { hasText: "With vocals" }).waitFor({ timeout: 5000 });
   await page.getByRole("radio", { name: "Gemini writes, sung from Latin letters" }).click();
   await page.getByRole("button", { name: "Make it" }).click();
   const farsi = page.locator("li.track", { hasText: "باران آرام می‌بارد" });
