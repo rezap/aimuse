@@ -105,39 +105,9 @@ Run the end-to-end test yourself with `./scripts/e2e.sh`.
 
 ## Deploy from Google Cloud Shell (simplest first deploy)
 
-In the Firebase console, first:
-1. Switch the project to the **Blaze** plan and set a budget alert.
-2. **Authentication** → Get started → **Google** → Enable.
-3. **Firestore Database** → Create database → production mode, location `nam5 (us-central)`.
-4. **Storage** → Get started → production mode, same location.
-
-Then, in Cloud Shell:
-
-```bash
-git clone https://github.com/rezap/aimuse.git && cd aimuse
-firebase login --no-localhost                       # skip if already logged in
-firebase use --add YOUR_PROJECT_ID                  # pick the project, alias "default"
-
-# Web app config -> web/.env.local
-firebase apps:create web aimuse-web                 # once; prints an App ID
-firebase apps:sdkconfig web                          # shows apiKey, authDomain, ...
-#   copy those into web/.env.local (see web/.env.example for the names)
-
-# Who may make songs, and the daily cap per person
-printf 'AIMUSE_ALLOWED_EMAILS=you@gmail.com\nAIMUSE_DAILY_USD=1.00\n' > functions/.env
-
-# Gemini key into Secret Manager (paste it when asked)
-firebase functions:secrets:set GEMINI_API_KEY
-
-# Python 3.12 environment the Firebase CLI uses to read the functions
-python3.12 -m venv functions/venv && functions/venv/bin/pip install -r functions/requirements.txt
-
-firebase deploy
-```
-
-Open `https://YOUR_PROJECT_ID.web.app`. If the first deploy fails on functions with a
-permissions or "Eventarc" message, wait 2–3 minutes and run `firebase deploy --only functions`
-again; new projects need a moment for permissions to spread.
+See **[Deployment: the steps that actually worked](../README.md#deployment-the-steps-that-actually-worked)**
+in the README. It is the exact sequence used for the live deploy, including the IAM and
+Eventarc fixes a new project needs.
 
 ## Deploy from GitHub Actions (repeatable)
 
